@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mandate-triage
+  group: sol-runtime
   cancel-in-progress: false
 jobs:
   triage:
