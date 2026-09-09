@@ -1,0 +1,50 @@
+[
+  {
+    "id": "enterprise_ai_operating_vp",
+    "title": "Vice President, Enterprise AI Operating Transformation",
+    "company": "Large Regulated Enterprise",
+    "location": "United States",
+    "description": "Own an enterprise-wide AI transformation portfolio reporting into the COO organization. Redesign service and operations workflows, set cross-functional decision rights, lead a substantial team and investment portfolio, and be accountable for measurable cost-to-serve, capacity, adoption and control outcomes. Partner with business presidents, CIO, risk and finance. This is not a research or model-training role.",
+    "allowed_outcomes": ["RELEVANT"]
+  },
+  {
+    "id": "strategic_portfolio_value_head",
+    "title": "Head of Strategic Portfolio Office",
+    "company": "National Health Enterprise",
+    "location": "United States",
+    "description": "Create one execution and value-realization model for a company-wide AI and automation portfolio exceeding $1B of targeted economic value. Advise C-suite investment decisions, orchestrate business, technology, finance and risk leaders, establish governance and predictability, and produce board-ready value evidence. Success is measured in operating gain, cost of care, capacity and execution reliability.",
+    "allowed_outcomes": ["RELEVANT"]
+  },
+  {
+    "id": "quota_hunter_sales",
+    "title": "Director, AI Platform Business Development",
+    "company": "Enterprise Software Company",
+    "location": "United States",
+    "description": "Individual quota-carrying hunter role responsible for net-new logo acquisition and aggressive pipeline creation. Personally prospect, cold-call, negotiate and close enterprise software subscriptions. Compensation is heavily commission-based and success is measured by bookings and quota attainment. No operating transformation team or internal value-realization mandate.",
+    "allowed_outcomes": ["CLEAR_NO"]
+  },
+  {
+    "id": "deep_ml_research_vp",
+    "title": "Vice President, Foundation Model Research",
+    "company": "AI Research Lab",
+    "location": "United States",
+    "description": "Lead a research organization inventing and training frontier foundation models from first principles. Requires a PhD in machine learning or related field, extensive publication record at NeurIPS/ICML/ICLR, direct ownership of large-scale pretraining, distributed training systems and model architecture research, and a decade of hands-on research leadership.",
+    "allowed_outcomes": ["CLEAR_NO"]
+  },
+  {
+    "id": "ambiguous_strategic_ops",
+    "title": "Director, Strategic Operations",
+    "company": "Fortune 500 Company",
+    "location": "United States",
+    "description": "Partner across functions on strategic initiatives, operating reviews and transformation priorities. The posting does not specify reporting line, team ownership, investment authority, enterprise scope, economic targets or whether the role is an operating leader versus a coordination function.",
+    "allowed_outcomes": ["POSSIBLE"]
+  },
+  {
+    "id": "specialist_ai_it_service_practice",
+    "title": "VP, AI Services",
+    "company": "Technology Services Provider",
+    "location": "United States",
+    "description": "Build and own a managed-services practice centered on ServiceNow, ITIL, AI-powered ITSM and MSP delivery. Requires deep ServiceNow implementation leadership, ITIL operating credentials, managed-service P&L ownership, service desk domain expertise and responsibility for selling and delivering the practice to external clients.",
+    "allowed_outcomes": ["CLEAR_NO"]
+  }
+]

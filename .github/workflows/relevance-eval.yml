@@ -1,0 +1,37 @@
+name: Relevance golden eval
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/relevance-eval.yml'
+      - 'evals/relevance_golden.json'
+      - 'backend/yna/eval_relevance.py'
+      - 'backend/yna/triage.py'
+      - 'backend/yna/model_router.py'
+permissions:
+  contents: read
+concurrency:
+  group: relevance-golden-eval
+  cancel-in-progress: true
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Backend regression tests
+        run: pytest -q backend/tests
+      - name: Run live Sol golden relevance cases
+        run: python -m yna.eval_relevance
