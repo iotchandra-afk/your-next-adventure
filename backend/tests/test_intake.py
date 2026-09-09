@@ -1,4 +1,5 @@
-from yna.intake import canonical_key, deterministic_screen, normalize_text, strip_html
+from yna.intake import canonical_key, normalize_text, strip_html
+from yna.screening import deterministic_screen
 
 
 def test_normalize_text_is_stable():
@@ -19,11 +20,27 @@ def test_director_plus_is_eligible_not_surfaced():
     assert confidence >= 0.9
 
 
-def test_clear_low_scope_is_hidden():
-    stage, visibility, reason, _ = deterministic_screen("Senior Product Manager")
+def test_ceo_acronym_is_never_false_negative():
+    stage, visibility, reason, _ = deterministic_screen("CEO, AI Services - US-Based")
+    assert stage == "ELIGIBLE"
+    assert visibility == "HIDDEN"
+    assert reason == "EXECUTIVE_SCOPE_PLAUSIBLE"
+
+
+def test_ambiguous_title_is_retained_for_mandate_triage():
+    stage, visibility, reason, confidence = deterministic_screen("Senior Product Manager")
+    assert stage == "ELIGIBLE"
+    assert visibility == "HIDDEN"
+    assert reason == "MANDATE_REVIEW_REQUIRED"
+    assert confidence < 0.7
+
+
+def test_clear_non_target_title_is_hidden_reject():
+    stage, visibility, reason, confidence = deterministic_screen("Sales Development Representative")
     assert stage == "TRIAGE_CLEAR_NO"
     assert visibility == "HIDDEN"
-    assert reason == "BELOW_EXECUTIVE_SCOPE"
+    assert reason == "CLEAR_NON_TARGET_TITLE"
+    assert confidence >= 0.99
 
 
 def test_revenue_ops_not_killed_by_sales_filter():
