@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -13,6 +15,9 @@ MODEL_PRICES_PER_MILLION = {
     "gpt-6-astra": {"input": 10.0, "output": 50.0},
 }
 WEB_SEARCH_COST_PER_CALL_USD = 0.01
+WEB_SEARCH_MAX_CALLS = 6
+_INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
+_BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,7 @@ class OpenAIResponses:
         route = ROUTES[capability]
         payload = self._base_payload(route, instructions, input_text, schema_name, schema)
         body = self._post(payload)
-        parsed = json.loads(self._extract_output_text(body))
+        parsed = clean_structured_result(json.loads(self._extract_output_text(body)))
         return parsed, body, route
 
     def structured_with_web(
@@ -80,22 +85,25 @@ class OpenAIResponses:
         input_text: str,
         schema_name: str,
         schema: dict[str, Any],
+        max_tool_calls: int = WEB_SEARCH_MAX_CALLS,
     ) -> tuple[dict[str, Any], dict[str, Any], Route, list[dict[str, str]]]:
-        """Run a typed capability with required current-web grounding.
+        """Run a typed capability with current-web grounding and bounded research.
 
-        The model may make multiple web-search calls. Source URLs/titles are extracted
-        from both web-search actions and output citations so downstream conclusions can
-        retain provenance without depending on prose citations.
+        `max_tool_calls` is a Responses API control, not a prompt request. We retain
+        citation-grade sources when output annotations exist; the broader search-result
+        universe is only a fallback. This keeps the evidence trail useful rather than
+        storing every exploratory result returned to the model.
         """
         route = ROUTES[capability]
         payload = self._base_payload(route, instructions, input_text, schema_name, schema)
         payload.update({
-            "tools": [{"type": "web_search"}],
+            "tools": [{"type": "web_search", "search_context_size": "medium"}],
             "tool_choice": "required",
+            "max_tool_calls": max(1, min(int(max_tool_calls), WEB_SEARCH_MAX_CALLS)),
             "include": ["web_search_call.action.sources"],
         })
         body = self._post(payload, timeout=360)
-        parsed = json.loads(self._extract_output_text(body))
+        parsed = clean_structured_result(json.loads(self._extract_output_text(body)))
         return parsed, body, route, self.web_sources(body)
 
     def _base_payload(
@@ -143,34 +151,64 @@ class OpenAIResponses:
 
     @staticmethod
     def web_sources(body: dict[str, Any]) -> list[dict[str, str]]:
-        sources: list[dict[str, str]] = []
-        seen: set[str] = set()
+        cited: list[dict[str, str]] = []
+        discovered: list[dict[str, str]] = []
 
-        def add(url: Any, title: Any = None, source_type: Any = None) -> None:
-            if not isinstance(url, str) or not url.startswith(("https://", "http://")) or url in seen:
+        def add(target: list[dict[str, str]], seen: set[str], url: Any, title: Any = None, source_type: Any = None) -> None:
+            normalized = normalize_source_url(url)
+            if not normalized or normalized in seen:
                 return
-            seen.add(url)
-            item = {"url": url}
+            seen.add(normalized)
+            item = {"url": normalized}
             if isinstance(title, str) and title.strip():
                 item["title"] = title.strip()
             if isinstance(source_type, str) and source_type.strip():
                 item["type"] = source_type.strip()
-            sources.append(item)
+            target.append(item)
 
+        cited_seen: set[str] = set()
+        discovered_seen: set[str] = set()
         for item in body.get("output", []):
-            if item.get("type") == "web_search_call":
-                action = item.get("action") or {}
-                for source in action.get("sources") or []:
-                    if isinstance(source, dict):
-                        add(source.get("url"), source.get("title"), source.get("type"))
             if item.get("type") == "message":
                 for content in item.get("content") or []:
                     for annotation in content.get("annotations") or []:
                         if not isinstance(annotation, dict):
                             continue
                         citation = annotation.get("url_citation") if isinstance(annotation.get("url_citation"), dict) else annotation
-                        add(citation.get("url"), citation.get("title"), annotation.get("type"))
-        return sources
+                        add(cited, cited_seen, citation.get("url"), citation.get("title"), annotation.get("type"))
+            if item.get("type") == "web_search_call":
+                action = item.get("action") or {}
+                for source in action.get("sources") or []:
+                    if isinstance(source, dict):
+                        add(discovered, discovered_seen, source.get("url"), source.get("title"), source.get("type"))
+        return cited if cited else discovered[:20]
+
+
+def normalize_source_url(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.startswith(("https://", "http://")):
+        return None
+    try:
+        parts = urlsplit(value)
+        query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not (k == "utm_source" and v == "openai")]
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+    except ValueError:
+        return value
+
+
+def strip_inline_citations(value: str) -> str:
+    cleaned = _INLINE_CITATION.sub("", value)
+    cleaned = _BARE_MARKDOWN_CITATION.sub("", cleaned)
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
+def clean_structured_result(value: Any, key: str | None = None) -> Any:
+    if isinstance(value, dict):
+        return {k: clean_structured_result(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [clean_structured_result(item, key) for item in value]
+    if isinstance(value, str) and key not in {"url", "urls", "evidence_url", "evidence_urls"}:
+        return strip_inline_citations(value)
+    return value
 
 
 def estimated_cost(model_id: str, usage: dict[str, Any] | None) -> float:
