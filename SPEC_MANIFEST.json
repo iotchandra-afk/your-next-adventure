@@ -3,7 +3,29 @@
   "status": "BUILDING",
   "implementation_authorized": true,
   "canonical_spec": "SPEC.md",
+  "execution_contract": "AGENTS.md",
+  "machine_execution_policy": "contracts/execution_policy.v1.json",
+  "execution_architecture": "docs/EXECUTION_MODEL.md",
   "human_entrypoint": "README.md",
+  "normative_sources": [
+    "SPEC.md",
+    "AGENTS.md",
+    "contracts/execution_policy.v1.json"
+  ],
+  "authority_split": {
+    "product_requirements": "SPEC.md",
+    "autonomous_agent_behavior": "AGENTS.md",
+    "machine_enforcement_contract": "contracts/execution_policy.v1.json"
+  },
+  "default_execution_action": "CONTINUE",
+  "communication_default": "SILENT_UNLESS_STOP_CONDITION",
+  "allowed_unsolicited_stop_conditions": [
+    "BLOCKED",
+    "APPROVAL_REQUIRED",
+    "HUMAN_ACTION_REQUIRED",
+    "DONE"
+  ],
+  "checkpoint_requires_user_acknowledgement": false,
   "private_data_model": "runtime_injection",
   "public_repo_safe_by_design": true,
   "normative_terms": ["MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY"],
