@@ -1,0 +1,13 @@
+[
+  {"source_key":"greenhouse:iconiq","source_family":"GREENHOUSE","display_name":"ICONIQ","base_url":"https://job-boards.greenhouse.io/iconiq","metadata":{"company_name":"ICONIQ","board_token":"iconiq"}},
+  {"source_key":"greenhouse:later","source_family":"GREENHOUSE","display_name":"Later","base_url":"https://job-boards.greenhouse.io/later","metadata":{"company_name":"Later","board_token":"later"}},
+  {"source_key":"greenhouse:convera","source_family":"GREENHOUSE","display_name":"Convera","base_url":"https://job-boards.greenhouse.io/convera","metadata":{"company_name":"Convera","board_token":"convera"}},
+  {"source_key":"greenhouse:levelaccess","source_family":"GREENHOUSE","display_name":"Level Access","base_url":"https://job-boards.greenhouse.io/levelaccess","metadata":{"company_name":"Level Access","board_token":"levelaccess"}},
+  {"source_key":"lever:toptal","source_family":"LEVER","display_name":"Toptal","base_url":"https://jobs.lever.co/toptal","metadata":{"company_name":"Toptal","site":"toptal"}},
+  {"source_key":"lever:bounteous","source_family":"LEVER","display_name":"Bounteous","base_url":"https://jobs.lever.co/bounteous","metadata":{"company_name":"Bounteous","site":"bounteous"}},
+  {"source_key":"smartrecruiters:rrdonnelley","source_family":"SMARTRECRUITERS","display_name":"RR Donnelley","base_url":"https://jobs.smartrecruiters.com/RRDonnelley","metadata":{"company_name":"RR Donnelley","company_identifier":"RRDonnelley"}},
+  {"source_key":"workday:hcsc","source_family":"WORKDAY","display_name":"HCSC","base_url":"https://hcsc.wd1.myworkdayjobs.com/HCSC_External","metadata":{"company_name":"HCSC","host":"hcsc.wd1.myworkdayjobs.com","tenant":"hcsc","site":"HCSC_External"}},
+  {"source_key":"workday:blackrock","source_family":"WORKDAY","display_name":"BlackRock","base_url":"https://blackrock.wd1.myworkdayjobs.com/BlackRock_Professional","metadata":{"company_name":"BlackRock","host":"blackrock.wd1.myworkdayjobs.com","tenant":"blackrock","site":"BlackRock_Professional"}},
+  {"source_key":"workday:thehartford","source_family":"WORKDAY","display_name":"The Hartford","base_url":"https://thehartford.wd5.myworkdayjobs.com/Careers_External","metadata":{"company_name":"The Hartford","host":"thehartford.wd5.myworkdayjobs.com","tenant":"thehartford","site":"Careers_External"}},
+  {"source_key":"workday:mizuho","source_family":"WORKDAY","display_name":"Mizuho Americas","base_url":"https://mizuho.wd1.myworkdayjobs.com/mizuhoamericas","metadata":{"company_name":"Mizuho Americas","host":"mizuho.wd1.myworkdayjobs.com","tenant":"mizuho","site":"mizuhoamericas"}}
+]
