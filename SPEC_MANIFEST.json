@@ -1,7 +1,7 @@
 {
   "project": "YourNextAdventure",
-  "status": "PLANNING_ONLY",
-  "implementation_authorized": false,
+  "status": "BUILD_ENABLEMENT",
+  "implementation_authorized": true,
   "canonical_spec": "SPEC.md",
   "human_entrypoint": "README.md",
   "private_data_model": "runtime_injection",
