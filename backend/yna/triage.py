@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .intake import SupabaseREST
+from .job_detail import fetch_job_detail
 from .model_router import OpenAIResponses, estimated_cost
 
 CAPABILITY = "RELEVANCE_TRIAGE"
@@ -81,27 +82,67 @@ def _company(db: SupabaseREST, company_id: str) -> dict[str, Any]:
     return rows[0] if rows else {"id": company_id, "display_name": "Unknown company"}
 
 
-def _source_evidence(db: SupabaseREST, opportunity_id: str) -> list[dict[str, Any]]:
-    links = db.select("opportunity_sources", {
+def _source_links(db: SupabaseREST, opportunity_id: str) -> list[dict[str, Any]]:
+    return db.select("opportunity_sources", {
         "opportunity_id": f"eq.{opportunity_id}",
         "select": "source_record_id,is_primary",
     })
-    evidence: list[dict[str, Any]] = []
-    for link in links[:4]:
-        records = db.select("source_records", {
-            "id": f"eq.{link['source_record_id']}",
-            "select": "external_id,canonical_url,state,content_hash,source_id,last_seen_at",
-            "limit": "1",
-        })
-        if not records:
+
+
+def _source_record(db: SupabaseREST, source_record_id: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    records = db.select("source_records", {
+        "id": f"eq.{source_record_id}",
+        "select": "id,external_id,canonical_url,state,content_hash,source_id,last_seen_at,raw_payload",
+        "limit": "1",
+    })
+    if not records:
+        return None
+    record = records[0]
+    sources = db.select("source_registry", {
+        "id": f"eq.{record['source_id']}",
+        "select": "source_family,display_name,source_key,metadata",
+        "limit": "1",
+    })
+    return record, (sources[0] if sources else {})
+
+
+def _ensure_description(db: SupabaseREST, role: dict[str, Any]) -> str:
+    existing = role.get("description_text") or ""
+    if existing.strip():
+        return existing
+    links = _source_links(db, role["id"])
+    links = sorted(links, key=lambda item: bool(item.get("is_primary")), reverse=True)
+    for link in links[:3]:
+        pair = _source_record(db, link["source_record_id"])
+        if not pair:
             continue
-        record = records[0]
-        sources = db.select("source_registry", {
-            "id": f"eq.{record['source_id']}",
-            "select": "source_family,display_name,source_key",
-            "limit": "1",
-        })
-        source = sources[0] if sources else {}
+        record, source = pair
+        try:
+            detail = fetch_job_detail(
+                source.get("source_family") or "",
+                source.get("metadata") or {},
+                record.get("external_id") or "",
+                record.get("raw_payload") or {},
+            )
+        except Exception:
+            detail = ""
+        if detail.strip():
+            db.patch("opportunities", {"id": f"eq.{role['id']}"}, {
+                "description_text": detail,
+                "updated_at": utcnow(),
+            })
+            role["description_text"] = detail
+            return detail
+    return ""
+
+
+def _source_evidence(db: SupabaseREST, opportunity_id: str) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for link in _source_links(db, opportunity_id)[:4]:
+        pair = _source_record(db, link["source_record_id"])
+        if not pair:
+            continue
+        record, source = pair
         evidence.append({
             "source_family": source.get("source_family"),
             "source_name": source.get("display_name"),
@@ -126,6 +167,42 @@ def _already_triaged(db: SupabaseREST, opportunity_id: str, input_hash: str) -> 
     return bool(rows)
 
 
+def _persist_result(
+    db: SupabaseREST,
+    run_id: str,
+    role_id: str,
+    result: dict[str, Any],
+    evidence: dict[str, Any],
+    route: Any,
+    usage: dict[str, Any],
+    trace_id: str,
+) -> None:
+    finished = utcnow()
+    response = db.session.post(
+        f"{db.base}/rpc/persist_relevance_triage_result",
+        json={
+            "p_opportunity_id": role_id,
+            "p_model_run_id": run_id,
+            "p_outcome": result["outcome"],
+            "p_reason_code": result["reason_code"],
+            "p_reason_text": result["reason_text"],
+            "p_confidence": result["confidence"],
+            "p_evidence": evidence,
+            "p_policy_version": POLICY_VERSION,
+            "p_model_class": route.model_class,
+            "p_model_id": route.model_id,
+            "p_reasoning_effort": route.reasoning_effort,
+            "p_trace_id": trace_id,
+            "p_input_tokens": int(usage.get("input_tokens") or 0),
+            "p_output_tokens": int(usage.get("output_tokens") or 0),
+            "p_estimated_cost_usd": estimated_cost(route.model_id, usage),
+            "p_finished_at": finished,
+        },
+        timeout=60,
+    )
+    response.raise_for_status()
+
+
 def triage_one(
     db: SupabaseREST,
     ai: OpenAIResponses,
@@ -136,6 +213,7 @@ def triage_one(
     pursuit_policy_version: str,
 ) -> str:
     company = _company(db, role["company_id"])
+    description = _ensure_description(db, role)
     sources = _source_evidence(db, role["id"])
     context = {
         "opportunity": {
@@ -143,7 +221,7 @@ def triage_one(
             "company": company.get("display_name"),
             "title": role.get("title"),
             "location": role.get("location"),
-            "description": (role.get("description_text") or "")[:18000],
+            "description": description[:18000],
             "posted_at": role.get("posted_at"),
             "first_seen_at": role.get("first_seen_at"),
             "last_seen_at": role.get("last_seen_at"),
@@ -159,7 +237,6 @@ def triage_one(
         return "SKIPPED_UNCHANGED"
 
     trace_id = str(uuid.uuid4())
-    started = utcnow()
     run = db.insert("model_runs", {
         "capability": CAPABILITY,
         "opportunity_id": role["id"],
@@ -171,7 +248,7 @@ def triage_one(
         "output_schema_version": OUTPUT_SCHEMA_VERSION,
         "policy_version": POLICY_VERSION,
         "trace_id": trace_id,
-        "started_at": started,
+        "started_at": utcnow(),
     })[0]
 
     try:
@@ -182,14 +259,6 @@ def triage_one(
             "relevance_triage",
             SCHEMA,
         )
-        usage = raw.get("usage") or {}
-        outcome = result["outcome"]
-        visibility = "SURFACED" if outcome == "RELEVANT" else "HIDDEN"
-        stage = {
-            "RELEVANT": "TRIAGED_RELEVANT",
-            "POSSIBLE": "TRIAGED_POSSIBLE",
-            "CLEAR_NO": "TRIAGED_CLEAR_NO",
-        }[outcome]
         evidence = {
             "mandate_summary": result["mandate_summary"],
             "supporting_factors": result["supporting_factors"],
@@ -200,45 +269,15 @@ def triage_one(
             "sources": sources,
             "candidate_truth_version": candidate_version,
             "pursuit_policy_version": pursuit_policy_version,
+            "description_available": bool(description.strip()),
         }
-        db.insert("screening_decisions", {
-            "opportunity_id": role["id"],
-            "stage": "MANDATE_RELEVANCE_TRIAGE",
-            "outcome": outcome,
-            "reason_code": result["reason_code"],
-            "reason_text": result["reason_text"],
-            "confidence": result["confidence"],
-            "evidence": evidence,
-            "policy_version": POLICY_VERSION,
-            "evaluator_type": "MODEL",
-            "model_class": route.model_class,
-            "model_id": route.model_id,
-            "trace_id": trace_id,
-        })
-        db.patch("opportunities", {"id": f"eq.{role['id']}"}, {
-            "screening_stage": stage,
-            "visibility": visibility,
-            "current_reason_code": result["reason_code"],
-            "current_reason_text": result["reason_text"],
-            "current_confidence": result["confidence"],
-            "policy_version": POLICY_VERSION,
-            "metadata": {"triage": evidence, "triage_trace_id": trace_id},
-            "updated_at": utcnow(),
-        })
-        db.patch("model_runs", {"id": f"eq.{run['id']}"}, {
-            "status": "PASSED",
-            "model_class": route.model_class,
-            "model_id": route.model_id,
-            "reasoning_effort": route.reasoning_effort,
-            "input_tokens": int(usage.get("input_tokens") or 0),
-            "output_tokens": int(usage.get("output_tokens") or 0),
-            "estimated_cost_usd": estimated_cost(route.model_id, usage),
-            "finished_at": utcnow(),
-        })
-        return outcome
+        _persist_result(db, run["id"], role["id"], result, evidence, route, raw.get("usage") or {}, trace_id)
+        return result["outcome"]
     except Exception as exc:
         db.patch("model_runs", {"id": f"eq.{run['id']}"}, {
-            "status": "FAILED", "error_text": f"{type(exc).__name__}: {exc}"[:1500], "finished_at": utcnow()
+            "status": "FAILED",
+            "error_text": f"{type(exc).__name__}: {exc}"[:1500],
+            "finished_at": utcnow(),
         })
         raise
 
@@ -264,7 +303,7 @@ def run() -> int:
                 "entity_type": "opportunity",
                 "entity_id": role["id"],
                 "severity": "ATTENTION",
-                "message": "Mandate relevance triage failed; opportunity remains hidden and retained.",
+                "message": "Mandate relevance triage failed; opportunity remains retained and unsurfaced.",
                 "details": {"error": f"{type(exc).__name__}: {exc}"[:1000]},
             })
     db.insert("activity_events", {
