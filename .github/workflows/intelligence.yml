@@ -1,0 +1,40 @@
+# Autonomous execution behavior is governed by AGENTS.md.
+name: Opportunity intelligence
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/intelligence.yml'
+      - 'backend/yna/intelligence.py'
+      - 'backend/yna/model_router.py'
+      - 'backend/tests/test_intelligence.py'
+permissions:
+  contents: read
+concurrency:
+  group: opportunity-intelligence
+  cancel-in-progress: false
+jobs:
+  intelligence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PYTHONPATH: backend
+      INTELLIGENCE_LIMIT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Backend regression tests
+        run: pytest -q backend/tests
+      - name: Build grounded intelligence bundle
+        run: python -m yna.intelligence
