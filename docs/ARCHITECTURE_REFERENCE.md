@@ -1,8 +1,8 @@
 # Architecture Reference
 
-**Status:** Planning reference, non-normative  
+**Status:** Active architecture reference, non-normative  
 **Canonical product contract:** [`../SPEC.md`](../SPEC.md)  
-**Intent:** Capture the current architectural direction without authorizing implementation.
+**Intent:** Capture the active architectural direction while implementation authority is governed by `SPEC_MANIFEST.json` and `AGENTS.md`.
 
 ## TL;DR
 

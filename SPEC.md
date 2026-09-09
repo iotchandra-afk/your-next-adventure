@@ -1,8 +1,8 @@
 # YourNextAdventure: Canonical Product and Operating Specification
 
 **Version:** 0.1-reset  
-**Status:** PLANNING ONLY  
-**Implementation authorization:** NOT GRANTED  
+**Status:** ACTIVE BUILD  
+**Implementation authorization:** GRANTED  
 **Audience:** Human product owner, AI coding/reasoning agents, engineers, reviewers  
 **Normative source:** This document
 

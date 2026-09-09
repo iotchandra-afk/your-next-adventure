@@ -59,3 +59,13 @@ def test_reserved_approval_boundaries_do_not_drift() -> None:
         "OUTBOUND_COMMUNICATION_SEND",
         "FINAL_JOB_APPLICATION_SUBMISSION",
     }
+
+
+def test_authority_headers_do_not_drift() -> None:
+    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "docs" / "ARCHITECTURE_REFERENCE.md").read_text(encoding="utf-8")
+
+    assert "**Status:** ACTIVE BUILD" in spec
+    assert "**Implementation authorization:** GRANTED" in spec
+    assert "NOT GRANTED" not in spec
+    assert "without authorizing implementation" not in architecture
