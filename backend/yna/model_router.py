@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -16,8 +18,12 @@ MODEL_PRICES_PER_MILLION = {
 }
 WEB_SEARCH_COST_PER_CALL_USD = 0.01
 WEB_SEARCH_MAX_CALLS = 6
+MAX_RESPONSE_ATTEMPTS = 6
+MAX_RETRY_DELAY_SECONDS = 120.0
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 _INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
 _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -132,12 +138,36 @@ class OpenAIResponses:
         }
 
     def _post(self, payload: dict[str, Any], timeout: int = 240) -> dict[str, Any]:
-        response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
-        response.raise_for_status()
-        body = response.json()
-        if body.get("status") != "completed":
-            raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
-        return body
+        """POST without silently downgrading quality; retry only transient failures.
+
+        Large grounded Astra calls can legitimately consume most of a token-rate window.
+        OpenAI exposes reset hints on 429 responses, so honor them before retrying the
+        exact same request. Non-transient 4xx responses fail immediately.
+        """
+        last_network_error: Exception | None = None
+        for attempt in range(MAX_RESPONSE_ATTEMPTS):
+            try:
+                response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_network_error = exc
+                if attempt >= MAX_RESPONSE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_fallback_retry_delay(attempt))
+                continue
+
+            if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
+                time.sleep(_response_retry_delay(response, attempt))
+                continue
+
+            response.raise_for_status()
+            body = response.json()
+            if body.get("status") != "completed":
+                raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
+            return body
+
+        if last_network_error:
+            raise last_network_error
+        raise RuntimeError("OpenAI response retry budget exhausted")
 
     @staticmethod
     def _extract_output_text(body: dict[str, Any]) -> str:
@@ -182,6 +212,47 @@ class OpenAIResponses:
                     if isinstance(source, dict):
                         add(discovered, discovered_seen, source.get("url"), source.get("title"), source.get("type"))
         return cited if cited else discovered[:20]
+
+
+def _parse_duration_seconds(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    try:
+        return max(0.0, float(text))
+    except ValueError:
+        pass
+    parts = _DURATION_PART.findall(text)
+    if not parts:
+        return None
+    consumed = "".join(f"{amount}{unit}" for amount, unit in parts).lower()
+    if consumed != re.sub(r"\s+", "", text):
+        return None
+    multipliers = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+    return sum(float(amount) * multipliers[unit.lower()] for amount, unit in parts)
+
+
+def _fallback_retry_delay(attempt: int) -> float:
+    base = min(5.0 * (2 ** attempt), 60.0)
+    return min(base + random.uniform(0.0, min(1.0, base * 0.1)), MAX_RETRY_DELAY_SECONDS)
+
+
+def _response_retry_delay(response: requests.Response, attempt: int) -> float:
+    headers = response.headers or {}
+    retry_after_ms = _parse_duration_seconds(headers.get("retry-after-ms"))
+    if retry_after_ms is not None:
+        retry_after_ms /= 1000.0
+    retry_after = _parse_duration_seconds(headers.get("retry-after"))
+    resets = [
+        _parse_duration_seconds(headers.get("x-ratelimit-reset-tokens")),
+        _parse_duration_seconds(headers.get("x-ratelimit-reset-requests")),
+    ]
+    hinted = [v for v in [retry_after_ms, retry_after, *resets] if v is not None]
+    if hinted:
+        return min(max(hinted) + random.uniform(0.0, 0.25), MAX_RETRY_DELAY_SECONDS)
+    return _fallback_retry_delay(attempt)
 
 
 def normalize_source_url(value: Any) -> str | None:
