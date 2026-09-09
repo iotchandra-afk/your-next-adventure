@@ -17,6 +17,7 @@ type Summary = {
 }
 type Opportunity = {
   id: string
+  company_id: string | null
   title: string
   location: string | null
   priority_class: string | null
@@ -85,8 +86,40 @@ type ModelRun = {
   input_tokens: number | null
   output_tokens: number | null
   estimated_cost_usd: number | null
+  web_search_calls?: number | null
+  tool_cost_usd?: number | null
 }
-type OpportunityDetail = { opportunity: Opportunity; decision: Decision | null; modelRun: ModelRun | null }
+type IntelligenceEvidence = { url?: string; title?: string; type?: string }
+type IntelligenceRecord = {
+  id: string
+  capability: string
+  capability_version: string
+  payload: Record<string, unknown>
+  evidence: IntelligenceEvidence[] | null
+  confidence: number | null
+  policy_version: string
+  model_id: string | null
+  reasoning_effort: string | null
+  trace_id: string | null
+  created_at: string
+}
+type OpportunityDetail = {
+  opportunity: Opportunity
+  decision: Decision | null
+  modelRun: ModelRun | null
+  intelligence: IntelligenceRecord[]
+}
+
+type Stakeholder = {
+  identity?: string
+  title?: string
+  role_in_decision?: string
+  likely_interest?: string
+  likely_objection?: string
+  relationship_to_role?: string
+  verification_status?: string
+  evidence_urls?: string[]
+}
 
 const emptySummary: Summary = {
   discovered: 0,
@@ -100,6 +133,8 @@ const emptySummary: Summary = {
   monitor: 0,
   needs_data: 0,
 }
+
+const intelligenceSelect = 'id,capability,capability_version,payload,evidence,confidence,policy_version,model_id,reasoning_effort,trace_id,created_at'
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -136,7 +171,7 @@ function App() {
     const [summaryResult, oppResult, sourceResult, activityResult, grayResult] = await Promise.all([
       supabase.rpc('intake_summary', { hours_back: 24 }),
       supabase.from('opportunities')
-        .select('id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name)')
+        .select('id,company_id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name)')
         .eq('visibility', 'SURFACED')
         .order('first_seen_at', { ascending: false })
         .limit(50),
@@ -164,25 +199,50 @@ function App() {
   async function openOpportunity(role: Opportunity) {
     setDetailLoading(true)
     setDetail(null)
-    const decisionResult = await supabase.from('screening_decisions')
-      .select('id,stage,outcome,reason_code,reason_text,confidence,evidence,policy_version,evaluator_type,model_class,model_id,trace_id,created_at')
+    const roleIntelQuery = supabase.from('intelligence_records')
+      .select(intelligenceSelect)
       .eq('opportunity_id', role.id)
+      .eq('status', 'COMPLETED')
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(40)
+    const companyIntelQuery = role.company_id
+      ? supabase.from('intelligence_records')
+          .select(intelligenceSelect)
+          .eq('company_id', role.company_id)
+          .is('opportunity_id', null)
+          .eq('status', 'COMPLETED')
+          .order('created_at', { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [], error: null })
+
+    const [decisionResult, roleIntelResult, companyIntelResult] = await Promise.all([
+      supabase.from('screening_decisions')
+        .select('id,stage,outcome,reason_code,reason_text,confidence,evidence,policy_version,evaluator_type,model_class,model_id,trace_id,created_at')
+        .eq('opportunity_id', role.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      roleIntelQuery,
+      companyIntelQuery,
+    ])
 
     const decision = (decisionResult.data ?? null) as Decision | null
     let modelRun: ModelRun | null = null
     if (decision?.trace_id) {
       const modelResult = await supabase.from('model_runs')
-        .select('model_id,reasoning_effort,policy_version,status,input_tokens,output_tokens,estimated_cost_usd')
+        .select('model_id,reasoning_effort,policy_version,status,input_tokens,output_tokens,estimated_cost_usd,web_search_calls,tool_cost_usd')
         .eq('trace_id', decision.trace_id)
         .order('finished_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       modelRun = (modelResult.data ?? null) as ModelRun | null
     }
-    setDetail({ opportunity: role, decision, modelRun })
+
+    const allIntel = [
+      ...((roleIntelResult.data ?? []) as unknown as IntelligenceRecord[]),
+      ...((companyIntelResult.data ?? []) as unknown as IntelligenceRecord[]),
+    ]
+    setDetail({ opportunity: role, decision, modelRun, intelligence: latestByCapability(allIntel) })
     setDetailLoading(false)
   }
 
@@ -350,15 +410,31 @@ function OpportunityRows({ opportunities, onOpen }: { opportunities: Opportunity
 }
 
 function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClose: () => void }) {
-  const { opportunity, decision, modelRun } = detail
+  const { opportunity, decision, modelRun, intelligence } = detail
   const evidence = decision?.evidence ?? {}
   const sources = evidence.sources ?? []
+  const intel = new Map(intelligence.map((record) => [record.capability, record]))
+  const core = intel.get('CORE_X')
+  const native = intel.get('NATIVE_CANDIDATE')
+  const pressure = intel.get('COMMERCIAL_PRESSURE')
+  const twoNotch = intel.get('TWO_NOTCH_UP')
+  const stakeholders = intel.get('STAKEHOLDER_CONTEXT')
+  const trajectory = intel.get('COMPANY_TRAJECTORY')
+
   return (
     <div className="drawer-backdrop" onMouseDown={onClose}>
       <section className="decision-drawer" onMouseDown={(e) => e.stopPropagation()}>
         <div className="drawer-head"><div><div className="eyebrow">DECISION GLASS</div><h2>{opportunity.title}</h2><p className="muted">{opportunity.company?.display_name}{opportunity.location ? ` · ${opportunity.location}` : ''}</p></div><button className="close" onClick={onClose}>×</button></div>
-        {!decision ? <p className="muted">No persisted decision trace is available yet.</p> : <>
-          <div className="decision-verdict"><span>{decision.outcome.replace('_', ' ')}</span><strong>{decision.reason_text}</strong></div>
+
+        {core && <section className="intelligence-verdict">
+          <span>CORE X</span>
+          <strong>{payloadText(core, 'statement') ?? 'Core X is not established.'}</strong>
+          {payloadText(core, 'why_now') && <p>{payloadText(core, 'why_now')}</p>}
+          <Confidence value={core.confidence} />
+        </section>}
+
+        {!decision ? <p className="muted">No persisted screening decision trace is available yet.</p> : <>
+          <div className="decision-verdict"><span>{decision.outcome.replaceAll('_', ' ')}</span><strong>{decision.reason_text}</strong></div>
           {evidence.mandate_summary && <DetailBlock title="Mandate"><p>{evidence.mandate_summary}</p></DetailBlock>}
           <div className="detail-grid">
             <DetailList title="Why it survived" items={evidence.supporting_factors ?? []} />
@@ -366,28 +442,147 @@ function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClos
           </div>
           <DetailList title="Material unknowns" items={evidence.material_unknowns ?? []} empty="No material unknowns recorded." />
           <DetailList title="Authority signals" items={evidence.authority_signals ?? []} empty="No authority signal established yet." />
-          <DetailBlock title="Evidence trail">
-            {sources.length === 0 ? <p className="muted">No source evidence attached.</p> : sources.map((source, i) => (
-              <div className="evidence-row" key={`${source.source_family}-${source.external_id}-${i}`}>
-                <div><strong>{source.source_name ?? source.source_family ?? 'Source'}</strong><small>{source.source_family} · {source.state ?? 'state unknown'}{source.external_id ? ` · ${source.external_id}` : ''}</small></div>
-                {source.canonical_url && <a href={source.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a>}
-              </div>
-            ))}
-          </DetailBlock>
-          <DetailBlock title="Decision trace">
-            <div className="trace-grid">
-              <Trace label="Candidate path" value={evidence.candidate_path ?? 'Unknown'} />
-              <Trace label="Evaluator" value={decision.evaluator_type} />
-              <Trace label="Model" value={modelRun?.model_id ?? decision.model_id ?? 'Deterministic'} />
-              <Trace label="Reasoning" value={modelRun?.reasoning_effort ?? 'n/a'} />
-              <Trace label="Policy" value={decision.policy_version ?? 'Unknown'} />
-              <Trace label="Trace" value={decision.trace_id ? decision.trace_id.slice(0, 12) : 'n/a'} />
-            </div>
-          </DetailBlock>
         </>}
+
+        {native && <DetailBlock title="Native candidate / winability">
+          <div className="intel-head"><strong>{payloadText(native, 'native_class')?.replaceAll('_', ' ')}</strong><Confidence value={native.confidence} /></div>
+          {payloadText(native, 'native_candidate_archetype') && <p className="muted-label">Likely native candidate: {payloadText(native, 'native_candidate_archetype')}</p>}
+          {payloadText(native, 'win_thesis') && <p><strong>{payloadText(native, 'win_thesis')}</strong></p>}
+          {payloadText(native, 'commentary') && <p>{payloadText(native, 'commentary')}</p>}
+          <InlineLists leftTitle="Candidate advantages" left={payloadList(native, 'candidate_advantages')} rightTitle="Skepticism to overcome" right={payloadList(native, 'skepticism_to_overcome')} />
+        </DetailBlock>}
+
+        {pressure && <DetailBlock title="Hiring-manager commercial pressure">
+          <div className="intel-head"><strong>{payloadText(pressure, 'statement')}</strong><Confidence value={pressure.confidence} /></div>
+          <DetailList title="Pressure chain" items={payloadList(pressure, 'pressure_tree')} />
+          <div className="trace-grid">
+            <Trace label="6 months" value={payloadText(pressure, 'success_6_months') ?? 'UNKNOWN'} />
+            <Trace label="12 months" value={payloadText(pressure, 'success_12_months') ?? 'UNKNOWN'} />
+            <Trace label="18 months" value={payloadText(pressure, 'success_18_months') ?? 'UNKNOWN'} />
+            <Trace label="HM must believe" value={payloadList(pressure, 'what_hm_needs_to_believe').join(' · ') || 'UNKNOWN'} />
+          </div>
+        </DetailBlock>}
+
+        {twoNotch && <DetailBlock title="Two-Notch-Up / Aditya Lens">
+          <IntelSequence label="Stated job" value={payloadText(twoNotch, 'level_0_stated_job')} />
+          <IntelSequence label="Underlying outcome" value={payloadText(twoNotch, 'level_1_underlying_outcome')} />
+          <IntelSequence label="Game changer" value={payloadText(twoNotch, 'level_2_game_changer')} />
+          <IntelSequence label="Future business / operating model" value={payloadText(twoNotch, 'future_business_or_operating_model')} />
+          <IntelSequence label="Economic consequence" value={payloadText(twoNotch, 'economic_consequence')} />
+          <IntelSequence label="What the hire should build toward" value={payloadText(twoNotch, 'role_reinterpretation')} />
+          <IntelSequence label="Overreach boundary" value={payloadText(twoNotch, 'overreach_boundary')} />
+          <Confidence value={twoNotch.confidence} />
+        </DetailBlock>}
+
+        {stakeholders && <StakeholderBlock record={stakeholders} />}
+
+        {trajectory && <DetailBlock title="Company trajectory">
+          <div className="intel-head"><strong>{payloadText(trajectory, 'current_health')}</strong><Confidence value={trajectory.confidence} /></div>
+          <div className="trace-grid">
+            <Trace label="Growth" value={payloadText(trajectory, 'growth_trajectory') ?? 'UNKNOWN'} />
+            <Trace label="Margin" value={payloadText(trajectory, 'margin_trajectory') ?? 'UNKNOWN'} />
+          </div>
+          <InlineLists leftTitle="Strategic priorities" left={payloadList(trajectory, 'strategic_priorities')} rightTitle="Biggest pressures" right={payloadList(trajectory, 'biggest_pain_points')} />
+          <IntelligenceSources sources={trajectory.evidence ?? []} />
+        </DetailBlock>}
+
+        <DetailBlock title="Evidence trail">
+          {sources.length === 0 ? <p className="muted">No screening-source evidence attached.</p> : sources.map((source, i) => (
+            <div className="evidence-row" key={`${source.source_family}-${source.external_id}-${i}`}>
+              <div><strong>{source.source_name ?? source.source_family ?? 'Source'}</strong><small>{source.source_family} · {source.state ?? 'state unknown'}{source.external_id ? ` · ${source.external_id}` : ''}</small></div>
+              {source.canonical_url && <a href={source.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a>}
+            </div>
+          ))}
+        </DetailBlock>
+
+        {decision && <DetailBlock title="Decision trace">
+          <div className="trace-grid">
+            <Trace label="Candidate path" value={evidence.candidate_path ?? 'Unknown'} />
+            <Trace label="Evaluator" value={decision.evaluator_type} />
+            <Trace label="Model" value={modelRun?.model_id ?? decision.model_id ?? 'Deterministic'} />
+            <Trace label="Reasoning" value={modelRun?.reasoning_effort ?? 'n/a'} />
+            <Trace label="Policy" value={decision.policy_version ?? 'Unknown'} />
+            <Trace label="Trace" value={decision.trace_id ? decision.trace_id.slice(0, 12) : 'n/a'} />
+          </div>
+        </DetailBlock>}
+
+        {intelligence.length > 0 && <DetailBlock title="Intelligence traces">
+          <div className="intelligence-traces">{intelligence.map((record) => (
+            <div key={record.id}><strong>{record.capability.replaceAll('_', ' ')}</strong><small>{record.model_id ?? 'Deterministic'} · {record.reasoning_effort ?? 'n/a'} · {record.capability_version} · trace {record.trace_id?.slice(0, 10) ?? 'n/a'}</small></div>
+          ))}</div>
+        </DetailBlock>}
       </section>
     </div>
   )
+}
+
+function StakeholderBlock({ record }: { record: IntelligenceRecord }) {
+  const stakeholders = payloadStakeholders(record)
+  const hm = payloadText(record, 'exact_hiring_manager') ?? 'UNKNOWN'
+  const hmStatus = payloadText(record, 'hiring_manager_verification') ?? 'UNKNOWN'
+  return <DetailBlock title="Stakeholder decision system">
+    <div className="hm-line"><div><span>Exact hiring manager</span><strong>{hm}</strong></div><Verification value={hmStatus} /></div>
+    {stakeholders.length === 0 ? <p className="muted">No defensible stakeholder identities established yet.</p> : stakeholders.map((person, i) => (
+      <div className="stakeholder-row" key={`${person.identity}-${i}`}>
+        <div><strong>{person.identity ?? 'Unknown person'}</strong><small>{person.title ?? 'Title unknown'} · {person.role_in_decision ?? 'role unknown'}</small>{person.relationship_to_role && <p>{person.relationship_to_role}</p>}</div>
+        <Verification value={person.verification_status ?? 'UNKNOWN'} />
+      </div>
+    ))}
+    <DetailList title="Alternate hypotheses" items={payloadList(record, 'alternate_hypotheses')} empty="None retained." />
+    <IntelligenceSources sources={record.evidence ?? []} />
+  </DetailBlock>
+}
+
+function IntelligenceSources({ sources }: { sources: IntelligenceEvidence[] }) {
+  if (!sources.length) return <p className="muted">No external research sources persisted for this capability.</p>
+  return <div className="research-sources">{sources.slice(0, 12).map((source, i) => source.url ? (
+    <a key={`${source.url}-${i}`} href={source.url} target="_blank" rel="noreferrer">{source.title ?? source.url} ↗</a>
+  ) : null)}</div>
+}
+
+function InlineLists({ leftTitle, left, rightTitle, right }: { leftTitle: string; left: string[]; rightTitle: string; right: string[] }) {
+  return <div className="detail-grid"><DetailList title={leftTitle} items={left} /><DetailList title={rightTitle} items={right} /></div>
+}
+
+function IntelSequence({ label, value }: { label: string; value?: string }) {
+  if (!value) return null
+  return <div className="intel-sequence"><span>{label}</span><p>{value}</p></div>
+}
+
+function Confidence({ value }: { value: number | null }) {
+  if (value === null || value === undefined) return null
+  const label = value >= .85 ? 'High confidence' : value >= .65 ? 'Moderate confidence' : 'Low confidence'
+  return <span className="confidence">{label}</span>
+}
+
+function Verification({ value }: { value: string }) {
+  return <span className={`verification ${value.toLowerCase()}`}>{value.replaceAll('_', ' ')}</span>
+}
+
+function latestByCapability(records: IntelligenceRecord[]): IntelligenceRecord[] {
+  const seen = new Set<string>()
+  return records
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .filter((record) => {
+      if (seen.has(record.capability)) return false
+      seen.add(record.capability)
+      return true
+    })
+}
+
+function payloadText(record: IntelligenceRecord, key: string): string | undefined {
+  const value = record.payload?.[key]
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function payloadList(record: IntelligenceRecord, key: string): string[] {
+  const value = record.payload?.[key]
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+}
+
+function payloadStakeholders(record: IntelligenceRecord): Stakeholder[] {
+  const value = record.payload?.stakeholders
+  return Array.isArray(value) ? value.filter((item): item is Stakeholder => Boolean(item) && typeof item === 'object') : []
 }
 
 function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) { return <section className="detail-block"><h3>{title}</h3>{children}</section> }
