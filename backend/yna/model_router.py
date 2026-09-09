@@ -17,10 +17,11 @@ MODEL_PRICES_PER_MILLION = {
     "gpt-6-astra": {"input": 10.0, "output": 50.0},
 }
 WEB_SEARCH_COST_PER_CALL_USD = 0.01
-WEB_SEARCH_MAX_CALLS = 6
-MAX_RESPONSE_ATTEMPTS = 6
-MAX_RETRY_DELAY_SECONDS = 120.0
+WEB_SEARCH_MAX_CALLS = 5
+MAX_RESPONSE_ATTEMPTS = 8
+MAX_RETRY_DELAY_SECONDS = 300.0
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+ASTRA_WEB_FALLBACK_COOLDOWN_SECONDS = 180.0
 _INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
 _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)", re.IGNORECASE)
@@ -61,6 +62,7 @@ class OpenAIResponses:
             "Content-Type": "application/json",
             "Accept": "application/json",
         })
+        self._not_before_by_model: dict[str, float] = {}
 
     def assert_model_available(self, model_id: str) -> dict[str, Any]:
         response = self.http.get(f"{self.base}/models/{model_id}", timeout=30)
@@ -103,7 +105,7 @@ class OpenAIResponses:
         route = ROUTES[capability]
         payload = self._base_payload(route, instructions, input_text, schema_name, schema)
         payload.update({
-            "tools": [{"type": "web_search", "search_context_size": "medium"}],
+            "tools": [{"type": "web_search", "search_context_size": "low"}],
             "tool_choice": "required",
             "max_tool_calls": max(1, min(int(max_tool_calls), WEB_SEARCH_MAX_CALLS)),
             "include": ["web_search_call.action.sources"],
@@ -140,34 +142,81 @@ class OpenAIResponses:
     def _post(self, payload: dict[str, Any], timeout: int = 240) -> dict[str, Any]:
         """POST without silently downgrading quality; retry only transient failures.
 
-        Large grounded Astra calls can legitimately consume most of a token-rate window.
-        OpenAI exposes reset hints on 429 responses, so honor them before retrying the
-        exact same request. Non-transient 4xx responses fail immediately.
+        High-cost grounded Astra calls can consume most of a token-rate window even
+        though the HTTP request itself completes normally. The client therefore honors
+        provider reset headers across sequential calls and uses a conservative fallback
+        cooldown after unusually large grounded Astra responses when those headers are
+        absent. A 429 retries the exact same request/model; no quality downgrade occurs.
         """
+        model_id = str(payload.get("model") or "")
         last_network_error: Exception | None = None
         for attempt in range(MAX_RESPONSE_ATTEMPTS):
+            self._wait_for_model(model_id)
             try:
                 response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
             except (requests.Timeout, requests.ConnectionError) as exc:
                 last_network_error = exc
                 if attempt >= MAX_RESPONSE_ATTEMPTS - 1:
                     raise
-                time.sleep(_fallback_retry_delay(attempt))
+                self._arm_model_delay(model_id, _fallback_retry_delay(attempt))
                 continue
 
             if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
-                time.sleep(_response_retry_delay(response, attempt))
+                self._arm_model_delay(model_id, _response_retry_delay(response, attempt))
                 continue
 
             response.raise_for_status()
             body = response.json()
             if body.get("status") != "completed":
                 raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
+            self._observe_success_rate_window(model_id, payload, response, body)
             return body
 
         if last_network_error:
             raise last_network_error
         raise RuntimeError("OpenAI response retry budget exhausted")
+
+    def _arm_model_delay(self, model_id: str, seconds: float) -> None:
+        if not model_id or seconds <= 0:
+            return
+        target = time.monotonic() + min(float(seconds), MAX_RETRY_DELAY_SECONDS)
+        self._not_before_by_model[model_id] = max(self._not_before_by_model.get(model_id, 0.0), target)
+
+    def _wait_for_model(self, model_id: str) -> None:
+        if not model_id:
+            return
+        wait = self._not_before_by_model.get(model_id, 0.0) - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+
+    def _observe_success_rate_window(
+        self,
+        model_id: str,
+        payload: dict[str, Any],
+        response: requests.Response,
+        body: dict[str, Any],
+    ) -> None:
+        headers = response.headers or {}
+        remaining = _parse_int_header(headers.get("x-ratelimit-remaining-tokens"))
+        limit = _parse_int_header(headers.get("x-ratelimit-limit-tokens"))
+        reset = _parse_duration_seconds(headers.get("x-ratelimit-reset-tokens"))
+        if remaining is not None and reset is not None:
+            exhausted_fraction = limit is not None and limit > 0 and remaining / limit <= 0.20
+            if remaining <= 10_000 or exhausted_fraction:
+                self._arm_model_delay(model_id, reset + 0.25)
+                return
+
+        usage = body.get("usage") or {}
+        total_tokens = int(usage.get("total_tokens") or 0)
+        if not total_tokens:
+            total_tokens = int(usage.get("input_tokens") or 0) + int(usage.get("output_tokens") or 0)
+        if (
+            model_id == "gpt-6-astra"
+            and payload.get("tools")
+            and total_tokens >= 30_000
+            and reset is None
+        ):
+            self._arm_model_delay(model_id, ASTRA_WEB_FALLBACK_COOLDOWN_SECONDS)
 
     @staticmethod
     def _extract_output_text(body: dict[str, Any]) -> str:
@@ -214,6 +263,15 @@ class OpenAIResponses:
         return cited if cited else discovered[:20]
 
 
+def _parse_int_header(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_duration_seconds(value: Any) -> float | None:
     if value is None:
         return None
@@ -234,16 +292,26 @@ def _parse_duration_seconds(value: Any) -> float | None:
     return sum(float(amount) * multipliers[unit.lower()] for amount, unit in parts)
 
 
+def _retry_after_ms_seconds(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    try:
+        return max(0.0, float(text) / 1000.0)
+    except ValueError:
+        return _parse_duration_seconds(text)
+
+
 def _fallback_retry_delay(attempt: int) -> float:
-    base = min(5.0 * (2 ** attempt), 60.0)
+    base = min(5.0 * (2 ** attempt), 120.0)
     return min(base + random.uniform(0.0, min(1.0, base * 0.1)), MAX_RETRY_DELAY_SECONDS)
 
 
 def _response_retry_delay(response: requests.Response, attempt: int) -> float:
     headers = response.headers or {}
-    retry_after_ms = _parse_duration_seconds(headers.get("retry-after-ms"))
-    if retry_after_ms is not None:
-        retry_after_ms /= 1000.0
+    retry_after_ms = _retry_after_ms_seconds(headers.get("retry-after-ms"))
     retry_after = _parse_duration_seconds(headers.get("retry-after"))
     resets = [
         _parse_duration_seconds(headers.get("x-ratelimit-reset-tokens")),
