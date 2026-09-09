@@ -11,7 +11,39 @@ YourNextAdventure is designed for sustained AI-native execution with minimal hum
 
 The architectural goal is not merely automation. It is **exception-driven autonomy with durable observability**.
 
-The core operating model is:
+The critical distinction is:
+
+```text
+CONTROL PLANE
+GitHub + spec + policy + database + CI
+    stores truth, state, evidence, and authority
+
+EXECUTION PLANE
+persistent agent/worker
+    performs work and can continue without a conversational turn
+```
+
+A durable control plane does not create a persistent execution plane.
+
+## 1. Why ordinary chat is not the persistent executor
+
+A synchronous assistant turn ends when the assistant sends a response. No repository instruction can alter that product lifecycle.
+
+Therefore ordinary chat is used for:
+
+- steering;
+- exceptions;
+- approvals;
+- human-only actions;
+- direct questions.
+
+It must not be represented as a background worker that continues after a response.
+
+For work that must continue after a response, use a persistent execution surface such as ChatGPT Work or a repository-native/durable agent runner.
+
+## 2. Correct autonomous operating model
+
+When a persistent execution surface is active:
 
 ```text
 AI executes
@@ -27,7 +59,16 @@ Human interaction occurs only when:
   DONE
 ```
 
-## 1. Control plane vs conversation
+When only synchronous chat is active:
+
+```text
+AI executes as much as possible in the current turn
+  -> persists state/evidence
+  -> answers only when the user explicitly asks or a stop condition is reached
+  -> does NOT claim execution will continue after that answer
+```
+
+## 3. Control plane vs conversation
 
 Execution state must live outside chat.
 
@@ -42,9 +83,9 @@ Operational visibility  -> cockpit
 Conversation            -> steering + exceptions
 ```
 
-This prevents conversational turns from becoming accidental workflow gates.
+This prevents conversational turns from becoming the system of record, but it does not make chat persistent.
 
-## 2. Pull-based visibility
+## 4. Pull-based visibility
 
 The user should be able to inspect progress whenever desired without requiring the agent to push routine updates.
 
@@ -52,7 +93,7 @@ Checkpoint passes, deployments, source health, model traces, retries, and test e
 
 The product should behave more like a well-instrumented service than a chatty project manager.
 
-## 3. Exception-driven communication
+## 5. Exception-driven communication
 
 Routine success does not require human attention.
 
@@ -63,36 +104,37 @@ The communication layer therefore behaves like alerting infrastructure:
 - action-required events may interrupt when they genuinely block progress;
 - approval-gated actions remain human controlled.
 
-## 4. Deterministic stop policy
+## 6. Deterministic stop policy
 
 Whether to interrupt the user should not be left to open-ended model judgment.
 
-The machine-readable policy defines a deterministic rule:
+The machine-readable policy defines:
 
 ```text
 if task_incomplete
 and no_blocker
 and no_approval_boundary
 and no_human_action
+and execution_surface_active
 then CONTINUE
 ```
 
 The model may reason about whether evidence constitutes a blocker, but the allowed response classes are constrained.
 
-## 5. Checkpoints are evidence events
+## 7. Checkpoints are evidence events
 
-A checkpoint does not return control to the user.
+A checkpoint does not require user acknowledgement.
 
 ```text
 checkpoint passes
   -> write evidence
   -> advance state
-  -> continue
+  -> continue if the execution surface remains active
 ```
 
 Human acknowledgement is not part of the state transition unless the checkpoint itself contains a reserved approval boundary.
 
-## 6. Failure behavior
+## 8. Failure behavior
 
 Recoverable failures remain inside the autonomous execution envelope.
 
@@ -106,7 +148,7 @@ The system should:
 
 Consequential uncertainty fails closed rather than inventing facts or authority.
 
-## 7. Human authority boundaries
+## 9. Human authority boundaries
 
 The user retains control over consequential side effects:
 
@@ -116,9 +158,9 @@ The user retains control over consequential side effects:
 - outbound communications;
 - final job-application submission.
 
-A human-only authentication or verification action may also be requested when no available tool can perform it and it blocks further execution.
+A human-only authentication, verification, or execution-surface switch may also be requested when no available tool can perform it and it blocks further autonomous work.
 
-## 8. Regression philosophy
+## 10. Regression philosophy
 
 Behavioral failures are engineering failures when they recur.
 
@@ -130,4 +172,4 @@ A repeated unwanted interruption should therefore result in one or more of:
 - a control-plane change;
 - an eval.
 
-The goal is to make learned operating behavior durable instead of relying on conversational memory.
+The goal is to make learned operating behavior durable while never confusing durable state with durable execution.
