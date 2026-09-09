@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: false-negative-audit
+  group: astra-runtime
   cancel-in-progress: false
 jobs:
   audit:
