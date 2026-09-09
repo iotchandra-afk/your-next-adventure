@@ -13,8 +13,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: relevance-golden-eval
-  cancel-in-progress: true
+  group: sol-runtime
+  cancel-in-progress: false
 jobs:
   eval:
     runs-on: ubuntu-latest
