@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/triage.yml'
       - 'backend/yna/triage.py'
+      - 'backend/yna/triage_parallel.py'
       - 'backend/yna/job_detail.py'
       - 'backend/yna/model_router.py'
       - 'backend/tests/**'
@@ -19,13 +20,14 @@ concurrency:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PYTHONPATH: backend
-      TRIAGE_LIMIT: '12'
+      TRIAGE_LIMIT: '64'
+      TRIAGE_WORKERS: '6'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,4 +39,4 @@ jobs:
       - name: Backend regression tests
         run: pytest -q backend/tests
       - name: Run mandate-aware relevance triage
-        run: python -m yna.triage
+        run: python -m yna.triage_parallel
