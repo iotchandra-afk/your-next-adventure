@@ -7,6 +7,7 @@
   "execution_contract": "AGENTS.md",
   "machine_execution_policy": "contracts/execution_policy.v1.json",
   "execution_architecture": "docs/EXECUTION_MODEL.md",
+  "persistent_execution_handoff": "docs/WORK_HANDOFF.md",
   "human_entrypoint": "README.md",
   "normative_sources": [
     "SPEC.md",
@@ -17,6 +18,13 @@
     "product_requirements": "SPEC.md",
     "autonomous_agent_behavior": "AGENTS.md",
     "machine_enforcement_contract": "contracts/execution_policy.v1.json"
+  },
+  "execution_surface_policy": {
+    "github_role": "CONTROL_PLANE_AND_SYSTEM_OF_RECORD",
+    "ordinary_chat_role": "STEERING_AND_EXCEPTIONS_ONLY",
+    "persistent_runner_required_for_cross_response_continuation": true,
+    "repository_instructions_create_persistence": false,
+    "preferred_persistent_surface": "CHATGPT_WORK"
   },
   "default_execution_action": "CONTINUE",
   "communication_default": "SILENT_UNLESS_STOP_CONDITION",
