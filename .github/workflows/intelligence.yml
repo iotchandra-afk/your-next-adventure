@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: opportunity-intelligence
+  group: astra-runtime
   cancel-in-progress: false
 jobs:
   intelligence:
