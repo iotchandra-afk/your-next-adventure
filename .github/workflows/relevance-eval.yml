@@ -1,3 +1,4 @@
+# Autonomous execution behavior is governed by AGENTS.md.
 name: Relevance golden eval
 on:
   workflow_dispatch:
