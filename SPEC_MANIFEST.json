@@ -2,6 +2,7 @@
   "project": "YourNextAdventure",
   "status": "BUILDING",
   "implementation_authorized": true,
+  "authority_reconciled_at": "2026-09-09",
   "canonical_spec": "SPEC.md",
   "execution_contract": "AGENTS.md",
   "machine_execution_policy": "contracts/execution_policy.v1.json",
