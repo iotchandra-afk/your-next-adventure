@@ -5,7 +5,19 @@
   "implementation_authority_source": "SPEC_MANIFEST.json",
   "default_action": "CONTINUE",
   "communication_default": "SILENT",
-  "decision_rule": "if task_incomplete and no_blocker and no_approval_boundary and no_human_action then CONTINUE",
+  "decision_rule": "if task_incomplete and no_blocker and no_approval_boundary and no_human_action and execution_surface_active then CONTINUE",
+  "execution_surface": {
+    "ordinary_chat_role": "STEERING_AND_EXCEPTIONS_ONLY",
+    "persistent_execution_required_for_cross_response_continuation": true,
+    "github_is_control_plane_not_execution_plane": true,
+    "repository_policy_does_not_create_chat_persistence": true,
+    "acceptable_persistent_surface_examples": [
+      "CHATGPT_WORK",
+      "REPOSITORY_NATIVE_AGENT",
+      "DURABLE_AUTOMATION_WORKER"
+    ],
+    "forbid_claiming_background_continuation_without_active_runner": true
+  },
   "stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
@@ -38,7 +50,7 @@
     "on_pass": [
       "VERIFY",
       "PERSIST_EVIDENCE",
-      "CONTINUE"
+      "CONTINUE_IF_EXECUTION_SURFACE_ACTIVE"
     ],
     "requires_user_acknowledgement": false,
     "emit_status_message": false
@@ -51,7 +63,8 @@
   },
   "user_requested_query_behavior": {
     "answer_direct_question": true,
-    "request_permission_to_resume_after_answer": false
+    "request_permission_to_resume_after_answer": false,
+    "claim_cross_response_continuation_in_ordinary_chat": false
   },
   "allowed_unsolicited_message_prefixes": [
     "BLOCKED",
