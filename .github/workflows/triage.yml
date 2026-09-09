@@ -1,0 +1,36 @@
+name: Mandate relevance triage
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/triage.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mandate-triage
+  cancel-in-progress: false
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PYTHONPATH: backend
+      TRIAGE_LIMIT: '12'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Backend regression tests
+        run: pytest -q backend/tests
+      - name: Run mandate-aware relevance triage
+        run: python -m yna.triage
