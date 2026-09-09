@@ -11,9 +11,13 @@ on:
       - '.github/workflows/intake.yml'
 permissions:
   contents: read
+concurrency:
+  group: live-intake
+  cancel-in-progress: true
 jobs:
   intake:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
@@ -29,4 +33,4 @@ jobs:
       - name: Unit tests
         run: pytest -q backend/tests
       - name: Run broad intake below the glass
-        run: python -m yna.intake
+        run: python -m yna.intake_batch
