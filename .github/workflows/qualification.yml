@@ -8,7 +8,6 @@ on:
     paths:
       - '.github/workflows/qualification.yml'
       - 'backend/yna/qualification.py'
-      - 'backend/yna/model_router.py'
       - 'backend/yna/triage.py'
       - 'backend/tests/test_qualification.py'
 permissions:
