@@ -11,17 +11,16 @@ import requests
 
 from .intake import (
     ADAPTERS,
-    POLICY_VERSION,
     RawJob,
     SupabaseREST,
     canonical_key,
     content_hash,
-    deterministic_screen,
     normalize_text,
     seed_sources,
     strip_html,
     utcnow,
 )
+from .screening import POLICY_VERSION, deterministic_screen
 
 
 def _flatten_strings(value: Any) -> list[str]:
@@ -76,7 +75,7 @@ def enrich_if_needed(source: dict[str, Any], job: RawJob) -> RawJob:
                 job.description = description
                 job.payload = {"listing": job.payload, "detail": detail}
     except Exception as exc:
-        # Enrichment failure does not invalidate a valid source listing. Triage can retain it as POSSIBLE.
+        # Enrichment failure never converts a valid listing into a reject. CP3 can retain it as POSSIBLE.
         job.payload = {"listing": job.payload, "enrichment_error": f"{type(exc).__name__}: {exc}"[:500]}
     return job
 
@@ -93,11 +92,12 @@ def prepare_snapshot(source: dict[str, Any], jobs: list[RawJob]) -> tuple[list[d
         seen.add(job.external_id)
         job = enrich_if_needed(source, job)
         stage, visibility, reason_code, confidence = deterministic_screen(job.title)
-        reason_text = (
-            "Plausible Director+ executive scope; retained for mandate-aware relevance triage."
-            if stage == "ELIGIBLE"
-            else "High-confidence deterministic title screen found no plausible Director+ executive mandate."
-        )
+        if reason_code == "EXECUTIVE_SCOPE_PLAUSIBLE":
+            reason_text = "Plausible executive scope; retained for mandate-aware relevance triage."
+        elif reason_code == "MANDATE_REVIEW_REQUIRED":
+            reason_text = "Title alone is insufficient for a safe rejection; retained below the glass for mandate-aware triage."
+        else:
+            reason_text = "High-confidence deterministic title exclusion; retained in the auditable hidden universe."
         prepared.append({
             "external_id": job.external_id,
             "url": job.url or "",
@@ -163,7 +163,7 @@ def sync_source(db: SupabaseREST, source: dict[str, Any]) -> dict[str, int]:
             "discovered_count": counts["discovered"], "new_count": counts["new"],
             "changed_count": counts["changed"], "duplicate_count": counts["duplicate"],
             "closed_count": counts["closed"], "error_count": 0,
-            "details": {"unchanged": batch["unchanged"], "engine": "batch_rpc_v1"},
+            "details": {"unchanged": batch["unchanged"], "engine": "batch_rpc_v1", "screening_policy": POLICY_VERSION},
         })
         db.insert("activity_events", {
             "event_type": "SOURCE_SYNC_COMPLETED", "entity_type": "source", "entity_id": source_id,
@@ -212,9 +212,9 @@ def run() -> int:
         "event_type": "INTAKE_CYCLE_COMPLETED",
         "severity": "INFO" if healthy >= 3 else "ATTENTION",
         "message": f"Intake cycle completed across {healthy} healthy ATS/source families.",
-        "details": {**totals, "healthy_families": healthy},
+        "details": {**totals, "healthy_families": healthy, "screening_policy": POLICY_VERSION},
     })
-    print(json.dumps({**totals, "healthy_families": healthy}, sort_keys=True))
+    print(json.dumps({**totals, "healthy_families": healthy, "screening_policy": POLICY_VERSION}, sort_keys=True))
     return 0 if healthy >= 3 else 2
 
 
