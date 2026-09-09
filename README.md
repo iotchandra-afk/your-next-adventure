@@ -1,92 +1,86 @@
 # YourNextAdventure
 
-**Status:** Planning / specification only  
-**Build authorization:** **NOT GRANTED**  
+**Status:** Active build  
+**Build authorization:** **GRANTED**  
 **Canonical specification:** [`SPEC.md`](./SPEC.md)
 
-YourNextAdventure is an executive opportunity intelligence and pursuit system. It is not a linear job-application pipeline and it is not primarily a resume tailor.
+YourNextAdventure is an executive opportunity intelligence and pursuit system. It is not a linear job-application pipeline, a job-board mirror, or primarily a resume tailor.
 
-The system continuously discovers opportunities, qualifies whether they are worth expensive attention, determines whether the candidate is native to the mandate or must beat a native candidate, understands the company's trajectory and the hiring manager's commercial pressure, identifies the real **Core of X**, develops a future-oriented **Two-Notch-Up / Aditya Lens**, locks positioning, and only then produces or executes the artifacts and actions appropriate to that opportunity.
+The system discovers broadly below the glass, normalizes and deduplicates signals, screens conservatively for plausible executive mandates, preserves a gray zone to protect against false negatives, and surfaces only relevant opportunities for deeper qualification and pursuit.
 
 ## Read this first
 
 1. `SPEC.md` is the normative source of truth.
 2. `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`, and `MAY` are normative.
-3. Structured YAML blocks define component contracts.
-4. Narrative text explains why the contract exists.
-5. The architecture is **shared-state + event-driven**, not a forced stage conveyor belt.
-6. Deterministic work should consume zero AI tokens wherever practical.
-7. AI reasoning is reserved for high-value inference, judgment, red-team work, and writing.
-8. Unknown consequential facts fail closed. The system does not guess.
-9. A job posting may be the first visible signal, but it is not necessarily the beginning of the pursuit.
-10. No implementation should begin until the specification is explicitly approved.
+3. The architecture is **shared-state + event-driven**, not a forced stage conveyor belt.
+4. Deterministic work should consume zero AI tokens wherever practical.
+5. AI reasoning is reserved for high-value inference, judgment, red-team work, and writing.
+6. Unknown consequential facts fail closed. The system does not guess.
+7. A job posting may be the first visible signal, but it is not necessarily the beginning of the pursuit.
+8. Implementation is authorized and currently underway.
 
 ## Core outcome
 
-> Continuously improve the probability that the candidate lands one of the highest-value mandates available to him, while minimizing unnecessary intervention, preserving truth and accumulated intelligence, and spending AI reasoning only where it materially improves decisions or outcomes.
+> Continuously improve the probability that the candidate lands one of the highest-value mandates available, while minimizing unnecessary intervention, preserving truth and accumulated intelligence, and spending AI reasoning only where it materially improves decisions or outcomes.
+
+## Screening principle
+
+> **Discover broadly. Screen generously. Qualify demanding. Present narrowly.**
+
+The raw discovery universe is machine working data, not the user experience. See [`docs/SCREENING_FUNNEL.md`](./docs/SCREENING_FUNNEL.md).
 
 ## Public vs private data
 
-This repository is designed to be safe to keep public.
+This repository is designed to remain safe to keep public.
 
 **Public repository contains**
-- product specification
-- schemas
-- decision rules
-- prompt contracts
+- product specification and architecture
+- source adapters and schemas
+- decision rules and prompt contracts
+- tests, fixtures, and deployment workflows
 - artifact templates with placeholders
-- examples that contain no personal data
-- public configuration examples
+- examples containing no private candidate data
 
-**Private runtime layer contains**
+**Private runtime contains**
 - candidate identity and contact information
-- resume / employment history
-- verified evidence and metrics
-- work authorization
-- compensation policy and application answers
-- private relationship data
-- emails and phone numbers
-- API credentials, tokens, cookies, and session secrets
-- private generated artifacts where appropriate
+- resume / employment history and verified evidence
+- work authorization and compensation policy
+- application answers and private relationship data
+- private artifacts and pursuit history
+- API credentials, OAuth tokens, cookies, and sessions
 
-The public code refers to private values only through stable keys such as
-`${CANDIDATE_FULL_NAME}`, `${CANDIDATE_PHONE}`, and `candidate.profile.*`.
+The public code refers to private values only through stable runtime keys. See [`PRIVATE_DATA_INJECTION.md`](./PRIVATE_DATA_INJECTION.md).
 
-See [`PRIVATE_DATA_INJECTION.md`](./PRIVATE_DATA_INJECTION.md).
+## Current product surfaces
 
-## Major components
+```text
+Home
+Intake
+Opportunities
+Companies
+                     Activity / Needs Me ->
+```
 
-- Intake and source resolution
-- Qualification and backlog filtering
-- Native-candidate / winability analysis
-- Role readiness and weighted mandate analysis
-- Company health, trajectory, and pain-point analysis
-- Hiring-manager commercial pressure
-- Stakeholder roadmap
-- Two-Notch-Up / Aditya Lens
-- Core of X
-- Positioning lock
-- Red-team loop, maximum three passes
-- Two-page executive resume generation
-- Hiring-manager outreach
-- Contact verification, local time, and send planning
-- Autonomous official-career-site application
-- Core-of-X cover letter
-- Optional thought-leadership one-pager
-- Opportunity search and faceted filtering
-- Shared-state dependency / invalidation controller
-- Reliability, provenance, and auditability
+Opportunity is the default work context. Company is the aggregation context. Intake is the source-coverage and screening-control context. Backend entities do not automatically become navigation items.
 
-## Planning references
+## Planning and implementation references
 
-These documents capture the current architecture, UX, and economic direction. They are **non-normative planning references** and do not override `SPEC.md`.
+- [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) — durable Lego architecture and provider independence.
+- [`docs/SCREENING_FUNNEL.md`](./docs/SCREENING_FUNNEL.md) — broad discovery, conservative exclusion, gray-zone handling, false-negative audit, and narrow presentation.
+- [`docs/GLASS_COCKPIT.md`](./docs/GLASS_COCKPIT.md) — minimum user-facing information architecture and trust drill-down.
+- [`docs/COST_MODEL.md`](./docs/COST_MODEL.md) — cost and paid-service guardrails.
+- [`docs/BUILD_ENABLEMENT.md`](./docs/BUILD_ENABLEMENT.md) — external dependencies and autonomy boundary.
 
-- [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) — Lego architecture, modular domain core, capability contracts, adapters, reconciliation, durable execution, provider independence, observability, and 10-year durability principles.
-- [`docs/GLASS_COCKPIT.md`](./docs/GLASS_COCKPIT.md) — single-pane-of-glass UX, activity stream, progressive disclosure, trust drill-down, connections, health, intervention, and product observability.
-- [`docs/COST_MODEL.md`](./docs/COST_MODEL.md) — red-teamed one-time and recurring costs, staged paid-service adoption, maintenance economics, and FinOps guardrails.
+## Current runtime direction
+
+- GitHub: public source of truth and CI/CD
+- GitHub Pages: authenticated single-user cockpit
+- Supabase/PostgreSQL: canonical runtime state, Auth, RLS, provenance, activity
+- React + TypeScript: cockpit
+- Python workers: intake and capability execution
+- OpenAI: Sol for standard reasoning, Astra for high-consequence reasoning
+- Public official ATS/company endpoints: discovery before paid job feeds
 
 ## Architectural rule
 
 The visible interface may use backlogs, cards, tabs, and status indicators. Those are projections over shared opportunity intelligence. They must not turn the underlying system into a rigid sequential workflow.
-
-See [`SPEC.md`](./SPEC.md) for the complete contract.
