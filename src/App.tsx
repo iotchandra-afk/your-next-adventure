@@ -20,6 +20,8 @@ type Opportunity = {
   title: string
   location: string | null
   priority_class: string | null
+  screening_stage: string
+  current_reason_code: string | null
   current_reason_text: string | null
   current_confidence: number | null
   first_seen_at: string
@@ -31,13 +33,60 @@ type Source = {
   source_family: string
   health: string
   last_success_at: string | null
+  last_error: string | null
 }
 type Activity = {
   id: string
   severity: string
   message: string
   created_at: string
+  entity_type: string | null
+  entity_id: string | null
 }
+type DecisionEvidence = {
+  mandate_summary?: string
+  supporting_factors?: string[]
+  constraints?: string[]
+  material_unknowns?: string[]
+  authority_signals?: string[]
+  candidate_path?: string
+  candidate_truth_version?: string
+  pursuit_policy_version?: string
+  sources?: Array<{
+    source_family?: string
+    source_name?: string
+    external_id?: string
+    canonical_url?: string
+    state?: string
+    content_hash?: string
+    is_primary?: boolean
+  }>
+}
+type Decision = {
+  id: string
+  stage: string
+  outcome: string
+  reason_code: string | null
+  reason_text: string | null
+  confidence: number | null
+  evidence: DecisionEvidence | null
+  policy_version: string | null
+  evaluator_type: string
+  model_class: string | null
+  model_id: string | null
+  trace_id: string | null
+  created_at: string
+}
+type ModelRun = {
+  model_id: string
+  reasoning_effort: string
+  policy_version: string
+  status: string
+  input_tokens: number | null
+  output_tokens: number | null
+  estimated_cost_usd: number | null
+}
+type OpportunityDetail = { opportunity: Opportunity; decision: Decision | null; modelRun: ModelRun | null }
 
 const emptySummary: Summary = {
   discovered: 0,
@@ -63,6 +112,9 @@ function App() {
   const [activity, setActivity] = useState<Activity[]>([])
   const [grayZoneCount, setGrayZoneCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [detail, setDetail] = useState<OpportunityDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -80,20 +132,58 @@ function App() {
 
   async function refresh() {
     setLoading(true)
+    setLoadError('')
     const [summaryResult, oppResult, sourceResult, activityResult, grayResult] = await Promise.all([
       supabase.rpc('intake_summary', { hours_back: 24 }),
-      supabase.from('opportunities').select('id,title,location,priority_class,current_reason_text,current_confidence,first_seen_at,company:companies(display_name)').eq('visibility', 'SURFACED').order('first_seen_at', { ascending: false }).limit(50),
-      supabase.from('source_registry').select('id,display_name,source_family,health,last_success_at').eq('enabled', true).order('display_name'),
-      supabase.from('activity_events').select('id,severity,message,created_at').order('created_at', { ascending: false }).limit(20),
+      supabase.from('opportunities')
+        .select('id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name)')
+        .eq('visibility', 'SURFACED')
+        .order('first_seen_at', { ascending: false })
+        .limit(50),
+      supabase.from('source_registry')
+        .select('id,display_name,source_family,health,last_success_at,last_error')
+        .eq('enabled', true)
+        .order('display_name'),
+      supabase.from('activity_events')
+        .select('id,severity,message,created_at,entity_type,entity_id')
+        .order('created_at', { ascending: false })
+        .limit(24),
       supabase.from('opportunities').select('id', { count: 'exact', head: true }).eq('visibility', 'GRAY_ZONE'),
     ])
 
+    const firstError = [summaryResult.error, oppResult.error, sourceResult.error, activityResult.error, grayResult.error].find(Boolean)
+    if (firstError) setLoadError(firstError.message)
     if (summaryResult.data?.[0]) setSummary(summaryResult.data[0] as Summary)
     setOpportunities((oppResult.data ?? []) as unknown as Opportunity[])
     setSources((sourceResult.data ?? []) as Source[])
     setActivity((activityResult.data ?? []) as Activity[])
     setGrayZoneCount(grayResult.count ?? 0)
     setLoading(false)
+  }
+
+  async function openOpportunity(role: Opportunity) {
+    setDetailLoading(true)
+    setDetail(null)
+    const decisionResult = await supabase.from('screening_decisions')
+      .select('id,stage,outcome,reason_code,reason_text,confidence,evidence,policy_version,evaluator_type,model_class,model_id,trace_id,created_at')
+      .eq('opportunity_id', role.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const decision = (decisionResult.data ?? null) as Decision | null
+    let modelRun: ModelRun | null = null
+    if (decision?.trace_id) {
+      const modelResult = await supabase.from('model_runs')
+        .select('model_id,reasoning_effort,policy_version,status,input_tokens,output_tokens,estimated_cost_usd')
+        .eq('trace_id', decision.trace_id)
+        .order('finished_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      modelRun = (modelResult.data ?? null) as ModelRun | null
+    }
+    setDetail({ opportunity: role, decision, modelRun })
+    setDetailLoading(false)
   }
 
   async function sendMagicLink(event: FormEvent) {
@@ -131,6 +221,8 @@ function App() {
     )
   }
 
+  const actionRequired = activity.filter((event) => event.severity === 'ACTION_REQUIRED').length
+
   return (
     <div className="shell">
       <header>
@@ -153,44 +245,47 @@ function App() {
 
       <div className="workspace">
         <main className="content">
-          {loading ? <p className="muted">Loading current state...</p> : null}
-          {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} />}
-          {!loading && page === 'Intake' && <Intake summary={summary} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} />}
-          {!loading && page === 'Opportunities' && <OpportunityList opportunities={opportunities} />}
+          {loading && <p className="muted">Loading current state...</p>}
+          {loadError && <div className="error-banner">Live data error: {loadError}</div>}
+          {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} />}
+          {!loading && page === 'Intake' && <Intake summary={summary} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} />}
+          {!loading && page === 'Opportunities' && <OpportunityList opportunities={opportunities} onOpen={openOpportunity} />}
           {!loading && page === 'Companies' && <CompanyList companies={companies} />}
         </main>
         <ActivityRail activity={activity} />
       </div>
+      {detailLoading && <div className="drawer-backdrop"><section className="decision-drawer"><p className="muted">Loading decision trace...</p></section></div>}
+      {detail && <DecisionDrawer detail={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
 
-function Home({ summary, opportunities, grayZoneCount }: { summary: Summary; opportunities: Opportunity[]; grayZoneCount: number }) {
+function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen }: { summary: Summary; opportunities: Opportunity[]; grayZoneCount: number; actionRequired: number; onOpen: (role: Opportunity) => void }) {
   return (
     <>
       <section className="hero-row">
         <div>
           <div className="eyebrow">WHAT MATTERS NOW</div>
           <h2>{summary.relevant} relevant opportunities surfaced in the last 24 hours</h2>
-          <p className="muted">Broad discovery is screened below the glass. Only plausible executive opportunities are surfaced here.</p>
+          <p className="muted">Broad discovery stays below the glass. Only roles that clear mandate-aware relevance screening enter this view.</p>
         </div>
-        <div className="needs-me"><strong>{summary.needs_data + grayZoneCount}</strong><span>Needs clarification</span></div>
+        <div className="needs-me"><strong>{actionRequired}</strong><span>Needs me</span></div>
       </section>
       <div className="metric-grid">
         <Metric label="Tier 1" value={summary.tier_1} />
         <Metric label="Tier 2" value={summary.tier_2} />
         <Metric label="Monitor" value={summary.monitor} />
-        <Metric label="Gray zone" value={grayZoneCount} />
+        <Metric label="Gray zone · system-held" value={grayZoneCount} />
       </div>
       <section className="panel">
         <div className="panel-title"><h3>Priority opportunities</h3><span>{opportunities.length} visible</span></div>
-        <OpportunityRows opportunities={opportunities.slice(0, 8)} />
+        <OpportunityRows opportunities={opportunities.slice(0, 8)} onOpen={onOpen} />
       </section>
     </>
   )
 }
 
-function Intake({ summary, sources, opportunities, grayZoneCount }: { summary: Summary; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number }) {
+function Intake({ summary, sources, opportunities, grayZoneCount, onOpen }: { summary: Summary; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void }) {
   const funnel = [
     ['Signals discovered', summary.discovered],
     ['Canonical roles', summary.canonical],
@@ -202,48 +297,115 @@ function Intake({ summary, sources, opportunities, grayZoneCount }: { summary: S
     <>
       <div className="eyebrow">SCREENING CONTROL</div>
       <h2>Broad discovery. Narrow human attention.</h2>
-      <p className="muted">The raw universe remains auditable, but is hidden by default. Hard rejects require high confidence; ambiguous roles remain in the gray zone instead of disappearing.</p>
+      <p className="muted">The raw universe remains auditable but hidden by default. Hard rejects require high confidence. Ambiguous roles stay in the gray zone for system follow-up instead of disappearing.</p>
       <section className="panel funnel">
         {funnel.map(([label, value], index) => <div className="funnel-step" key={label}><span>{label}</span><strong>{value}</strong>{index < funnel.length - 1 && <i>→</i>}</div>)}
       </section>
       <div className="split-grid">
         <section className="panel">
           <div className="panel-title"><h3>Source health</h3><span>{sources.length} enabled</span></div>
-          {sources.length === 0 ? <p className="muted">Source adapters have not completed their first run yet.</p> : sources.map((source) => (
-            <div className="source-row" key={source.id}><div><strong>{source.display_name}</strong><small>{source.source_family}</small></div><span className={`health ${source.health.toLowerCase()}`}>{source.health}</span></div>
+          {sources.length === 0 ? <p className="muted">No source state available.</p> : sources.map((source) => (
+            <div className="source-row" key={source.id}>
+              <div><strong>{source.display_name}</strong><small>{source.source_family} · {source.last_success_at ? `healthy ${relativeTime(source.last_success_at)}` : 'awaiting first success'}</small>{source.last_error && <small className="source-error">{source.last_error}</small>}</div>
+              <span className={`health ${source.health.toLowerCase()}`}>{source.health}</span>
+            </div>
           ))}
         </section>
         <section className="panel">
           <div className="panel-title"><h3>Screening outcomes</h3><span>last 24h</span></div>
           <StatRow label="Clear no, retained but hidden" value={summary.clear_no} />
-          <StatRow label="Possible fit / gray zone" value={Math.max(summary.possible_fit, grayZoneCount)} />
+          <StatRow label="Possible / gray zone" value={Math.max(summary.possible_fit, grayZoneCount)} />
           <StatRow label="Relevant and surfaced" value={summary.relevant} />
-          <StatRow label="Needs more data" value={summary.needs_data} />
+          <StatRow label="Needs data" value={summary.needs_data} />
         </section>
       </div>
       <section className="panel">
         <div className="panel-title"><h3>Roles that cleared relevance screening</h3><span>{opportunities.length}</span></div>
-        <OpportunityRows opportunities={opportunities} />
+        <OpportunityRows opportunities={opportunities} onOpen={onOpen} />
       </section>
     </>
   )
 }
 
-function OpportunityList({ opportunities }: { opportunities: Opportunity[] }) {
-  return <><div className="eyebrow">PURSUIT PORTFOLIO</div><h2>Opportunities</h2><p className="muted">This is not the internet. These roles have already cleared relevance screening.</p><section className="panel"><OpportunityRows opportunities={opportunities} /></section></>
+function OpportunityList({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (role: Opportunity) => void }) {
+  return <><div className="eyebrow">PURSUIT PORTFOLIO</div><h2>Opportunities</h2><p className="muted">This is not the internet. Every role here has already cleared mandate-aware relevance screening.</p><section className="panel"><OpportunityRows opportunities={opportunities} onOpen={onOpen} /></section></>
 }
 
 function CompanyList({ companies }: { companies: [string, number][] }) {
-  return <><div className="eyebrow">AGGREGATION LENS</div><h2>Companies</h2><p className="muted">Shared intelligence compounds across multiple opportunities at the same company.</p><section className="panel">{companies.length === 0 ? <p className="muted">No surfaced company opportunities yet.</p> : companies.map(([name, count]) => <div className="company-row" key={name}><strong>{name}</strong><span>{count} relevant role{count === 1 ? '' : 's'}</span></div>)}</section></>
+  return <><div className="eyebrow">AGGREGATION LENS</div><h2>Companies</h2><p className="muted">Company context compounds across surfaced opportunities without turning the product into a CRM.</p><section className="panel">{companies.length === 0 ? <p className="muted">No surfaced company opportunities yet.</p> : companies.map(([name, count]) => <div className="company-row" key={name}><strong>{name}</strong><span>{count} relevant role{count === 1 ? '' : 's'}</span></div>)}</section></>
 }
 
-function OpportunityRows({ opportunities }: { opportunities: Opportunity[] }) {
+function OpportunityRows({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (role: Opportunity) => void }) {
   if (opportunities.length === 0) return <p className="muted">No roles have cleared the relevance gate yet.</p>
-  return <div>{opportunities.map((role) => <div className="opportunity-row" key={role.id}><div><div className="role-title">{role.title}</div><div className="role-meta">{role.company?.display_name ?? 'Company pending'}{role.location ? ` · ${role.location}` : ''}</div>{role.current_reason_text && <div className="reason">{role.current_reason_text}</div>}</div><span className={`priority ${(role.priority_class ?? 'needs_data').toLowerCase()}`}>{(role.priority_class ?? 'NEEDS_DATA').replace('_', ' ')}</span></div>)}</div>
+  return <div>{opportunities.map((role) => (
+    <button className="opportunity-row opportunity-button" key={role.id} onClick={() => onOpen(role)}>
+      <div>
+        <div className="role-title">{role.title}</div>
+        <div className="role-meta">{role.company?.display_name ?? 'Company pending'}{role.location ? ` · ${role.location}` : ''}</div>
+        {role.current_reason_text && <div className="reason">{role.current_reason_text}</div>}
+      </div>
+      <div className="role-actions"><span className={`priority ${(role.priority_class ?? 'needs_data').toLowerCase()}`}>{(role.priority_class ?? 'NEEDS_DATA').replace('_', ' ')}</span><span className="inspect">Inspect →</span></div>
+    </button>
+  ))}</div>
 }
+
+function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClose: () => void }) {
+  const { opportunity, decision, modelRun } = detail
+  const evidence = decision?.evidence ?? {}
+  const sources = evidence.sources ?? []
+  return (
+    <div className="drawer-backdrop" onMouseDown={onClose}>
+      <section className="decision-drawer" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="drawer-head"><div><div className="eyebrow">DECISION GLASS</div><h2>{opportunity.title}</h2><p className="muted">{opportunity.company?.display_name}{opportunity.location ? ` · ${opportunity.location}` : ''}</p></div><button className="close" onClick={onClose}>×</button></div>
+        {!decision ? <p className="muted">No persisted decision trace is available yet.</p> : <>
+          <div className="decision-verdict"><span>{decision.outcome.replace('_', ' ')}</span><strong>{decision.reason_text}</strong></div>
+          {evidence.mandate_summary && <DetailBlock title="Mandate"><p>{evidence.mandate_summary}</p></DetailBlock>}
+          <div className="detail-grid">
+            <DetailList title="Why it survived" items={evidence.supporting_factors ?? []} />
+            <DetailList title="Constraints" items={evidence.constraints ?? []} />
+          </div>
+          <DetailList title="Material unknowns" items={evidence.material_unknowns ?? []} empty="No material unknowns recorded." />
+          <DetailList title="Authority signals" items={evidence.authority_signals ?? []} empty="No authority signal established yet." />
+          <DetailBlock title="Evidence trail">
+            {sources.length === 0 ? <p className="muted">No source evidence attached.</p> : sources.map((source, i) => (
+              <div className="evidence-row" key={`${source.source_family}-${source.external_id}-${i}`}>
+                <div><strong>{source.source_name ?? source.source_family ?? 'Source'}</strong><small>{source.source_family} · {source.state ?? 'state unknown'}{source.external_id ? ` · ${source.external_id}` : ''}</small></div>
+                {source.canonical_url && <a href={source.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a>}
+              </div>
+            ))}
+          </DetailBlock>
+          <DetailBlock title="Decision trace">
+            <div className="trace-grid">
+              <Trace label="Candidate path" value={evidence.candidate_path ?? 'Unknown'} />
+              <Trace label="Evaluator" value={decision.evaluator_type} />
+              <Trace label="Model" value={modelRun?.model_id ?? decision.model_id ?? 'Deterministic'} />
+              <Trace label="Reasoning" value={modelRun?.reasoning_effort ?? 'n/a'} />
+              <Trace label="Policy" value={decision.policy_version ?? 'Unknown'} />
+              <Trace label="Trace" value={decision.trace_id ? decision.trace_id.slice(0, 12) : 'n/a'} />
+            </div>
+          </DetailBlock>
+        </>}
+      </section>
+    </div>
+  )
+}
+
+function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) { return <section className="detail-block"><h3>{title}</h3>{children}</section> }
+function DetailList({ title, items, empty = 'None recorded.' }: { title: string; items: string[]; empty?: string }) { return <DetailBlock title={title}>{items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="muted">{empty}</p>}</DetailBlock> }
+function Trace({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div> }
 
 function ActivityRail({ activity }: { activity: Activity[] }) {
-  return <aside><div className="panel-title"><h3>Activity</h3><span>system</span></div>{activity.length === 0 ? <p className="muted">Waiting for first autonomous run.</p> : activity.map((event) => <div className="activity-item" key={event.id}><span className={`activity-mark ${event.severity.toLowerCase()}`} /><div><strong>{event.message}</strong><small>{new Date(event.created_at).toLocaleString()}</small></div></div>)}</aside>
+  return <aside><div className="panel-title"><h3>Activity</h3><span>system</span></div>{activity.length === 0 ? <p className="muted">Waiting for first autonomous run.</p> : activity.map((event) => <div className={`activity-item ${event.severity === 'ACTION_REQUIRED' ? 'prominent' : ''}`} key={event.id}><span className={`activity-mark ${event.severity.toLowerCase()}`} /><div><strong>{event.message}</strong><small>{relativeTime(event.created_at)} · {event.severity.replace('_', ' ')}</small></div></div>)}</aside>
+}
+
+function relativeTime(value: string) {
+  const diff = Date.now() - new Date(value).getTime()
+  const mins = Math.max(0, Math.floor(diff / 60000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div> }
