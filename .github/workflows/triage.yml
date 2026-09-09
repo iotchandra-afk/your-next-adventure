@@ -10,8 +10,8 @@ on:
       - 'backend/yna/triage.py'
       - 'backend/yna/triage_parallel.py'
       - 'backend/yna/job_detail.py'
-      - 'backend/yna/model_router.py'
-      - 'backend/tests/**'
+      - 'backend/tests/test_triage.py'
+      - 'backend/tests/test_job_detail.py'
 permissions:
   contents: read
 concurrency:
