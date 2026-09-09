@@ -41,8 +41,11 @@ def _flatten_strings(value: Any) -> list[str]:
 
 
 def enrich_if_needed(source: dict[str, Any], job: RawJob) -> RawJob:
-    stage, _, _, _ = deterministic_screen(job.title)
-    if stage != "ELIGIBLE" or job.description:
+    stage, _, reason_code, _ = deterministic_screen(job.title)
+    # Keep the recall-first universe cheap. Listing-detail enrichment is useful immediately
+    # for explicit executive-plausible roles. Ambiguous-title roles stay retained below the
+    # glass and are enriched selectively by mandate triage rather than multiplying HTTP calls.
+    if stage != "ELIGIBLE" or reason_code != "EXECUTIVE_SCOPE_PLAUSIBLE" or job.description:
         return job
 
     family = source["source_family"]
@@ -75,7 +78,6 @@ def enrich_if_needed(source: dict[str, Any], job: RawJob) -> RawJob:
                 job.description = description
                 job.payload = {"listing": job.payload, "detail": detail}
     except Exception as exc:
-        # Enrichment failure never converts a valid listing into a reject. CP3 can retain it as POSSIBLE.
         job.payload = {"listing": job.payload, "enrichment_error": f"{type(exc).__name__}: {exc}"[:500]}
     return job
 
