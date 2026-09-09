@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "project": "YourNextAdventure",
+  "mode": "AUTONOMOUS_EXECUTION",
+  "implementation_authority_source": "SPEC_MANIFEST.json",
+  "default_action": "CONTINUE",
+  "communication_default": "SILENT",
+  "decision_rule": "if task_incomplete and no_blocker and no_approval_boundary and no_human_action then CONTINUE",
+  "stop_conditions": [
+    "BLOCKED",
+    "APPROVAL_REQUIRED",
+    "HUMAN_ACTION_REQUIRED",
+    "DONE"
+  ],
+  "approval_boundaries": [
+    "NEW_MATERIAL_PAID_SERVICE",
+    "DESTRUCTIVE_PRODUCTION_OPERATION",
+    "SECURITY_BOUNDARY_CHANGE",
+    "OUTBOUND_COMMUNICATION_SEND",
+    "FINAL_JOB_APPLICATION_SUBMISSION"
+  ],
+  "forbidden_unsolicited_interruptions": [
+    "PROGRESS_UPDATE",
+    "PERCENT_COMPLETE",
+    "CHECKPOINT_PASS",
+    "SUCCESSFUL_TEST",
+    "SUCCESSFUL_DEPLOYMENT",
+    "SUCCESSFUL_MIGRATION",
+    "ROUTINE_IMPLEMENTATION_CHOICE",
+    "RECOVERABLE_FAILURE",
+    "DEBUGGING_PROGRESS",
+    "SOURCE_SYNC_STATUS",
+    "MODEL_RUN_STATUS",
+    "REQUEST_TO_PROCEED",
+    "REQUEST_TO_RECONFIRM_EXISTING_AUTHORITY"
+  ],
+  "checkpoint_behavior": {
+    "on_pass": [
+      "VERIFY",
+      "PERSIST_EVIDENCE",
+      "CONTINUE"
+    ],
+    "requires_user_acknowledgement": false,
+    "emit_status_message": false
+  },
+  "failure_behavior": {
+    "recoverable_failure": "REMEDIATE_AND_CONTINUE",
+    "consequential_unknown": "FAIL_CLOSED",
+    "escalate_only_if_stop_condition": true,
+    "bundle_unresolved_questions": true
+  },
+  "user_requested_query_behavior": {
+    "answer_direct_question": true,
+    "request_permission_to_resume_after_answer": false
+  },
+  "allowed_unsolicited_message_prefixes": [
+    "BLOCKED",
+    "APPROVAL REQUIRED",
+    "HUMAN ACTION REQUIRED",
+    "DONE"
+  ],
+  "control_plane": {
+    "product_contract": "SPEC.md",
+    "agent_contract": "AGENTS.md",
+    "manifest": "SPEC_MANIFEST.json",
+    "checkpoint_evidence": "GitHub issue/control board",
+    "runtime_state": "PostgreSQL/Supabase",
+    "verification": "CI/evals"
+  }
+}
