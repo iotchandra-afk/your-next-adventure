@@ -1,0 +1,18 @@
+{
+  "project": "YourNextAdventure",
+  "status": "PLANNING_ONLY",
+  "implementation_authorized": false,
+  "canonical_spec": "SPEC.md",
+  "human_entrypoint": "README.md",
+  "private_data_model": "runtime_injection",
+  "public_repo_safe_by_design": true,
+  "normative_terms": [
+    "MUST",
+    "MUST NOT",
+    "SHOULD",
+    "SHOULD NOT",
+    "MAY"
+  ],
+  "architecture": "shared-state-event-driven",
+  "not_linear_pipeline": true
+}

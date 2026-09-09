@@ -1,0 +1,12 @@
+candidate:
+  identity:
+    first_name: "${CANDIDATE_FIRST_NAME}"
+    full_name: "${CANDIDATE_FULL_NAME}"
+    phone: "${CANDIDATE_PHONE}"
+    email: "${CANDIDATE_EMAIL}"
+
+  providers:
+    profile: "private_runtime_provider"
+    application_answers: "private_runtime_provider"
+    relationships: "private_runtime_provider"
+    artifacts: "private_runtime_provider"

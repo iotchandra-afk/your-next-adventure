@@ -1,0 +1,14 @@
+# Private candidate data
+.env
+.env.*
+!.env.example
+candidate.private.yaml
+config/candidate.private.yaml
+private/
+secrets/
+artifacts/private/
+
+# Local/generated
+.DS_Store
+__pycache__/
+*.pyc
