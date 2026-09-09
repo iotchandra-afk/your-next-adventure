@@ -2,7 +2,8 @@
 
 **Status:** Active build  
 **Build authorization:** **GRANTED**  
-**Canonical specification:** [`SPEC.md`](./SPEC.md)
+**Canonical specification:** [`SPEC.md`](./SPEC.md)  
+**Autonomous execution contract:** [`AGENTS.md`](./AGENTS.md)
 
 YourNextAdventure is an executive opportunity intelligence and pursuit system. It is not a linear job-application pipeline, a job-board mirror, or primarily a resume tailor.
 
@@ -10,14 +11,40 @@ The system discovers broadly below the glass, normalizes and deduplicates signal
 
 ## Read this first
 
-1. `SPEC.md` is the normative source of truth.
-2. `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`, and `MAY` are normative.
-3. The architecture is **shared-state + event-driven**, not a forced stage conveyor belt.
-4. Deterministic work should consume zero AI tokens wherever practical.
-5. AI reasoning is reserved for high-value inference, judgment, red-team work, and writing.
-6. Unknown consequential facts fail closed. The system does not guess.
-7. A job posting may be the first visible signal, but it is not necessarily the beginning of the pursuit.
-8. Implementation is authorized and currently underway.
+1. `SPEC.md` is the normative product source of truth.
+2. `AGENTS.md` is the normative autonomous execution and communication contract.
+3. `contracts/execution_policy.v1.json` is the machine-readable execution policy.
+4. `SPEC_MANIFEST.json` binds product requirements and agent behavior into one control plane.
+5. `MUST`, `MUST NOT`, `SHOULD`, `SHOULD NOT`, and `MAY` are normative.
+6. The architecture is **shared-state + event-driven**, not a forced stage conveyor belt.
+7. Deterministic work should consume zero AI tokens wherever practical.
+8. AI reasoning is reserved for high-value inference, judgment, red-team work, and writing.
+9. Unknown consequential facts fail closed. The system does not guess.
+10. A job posting may be the first visible signal, but it is not necessarily the beginning of the pursuit.
+11. Implementation is authorized and currently underway.
+
+## Autonomous execution rule
+
+The default implementation behavior is:
+
+```text
+TASK INCOMPLETE
+AND no genuine blocker
+AND no approval boundary
+AND no human-only action
+=> CONTINUE
+```
+
+Routine checkpoint passes, successful tests, deployments, migrations, retries, and progress updates are persisted to the control plane and do **not** require user acknowledgement.
+
+During autonomous execution, unsolicited interruption is reserved for exactly four conditions:
+
+- `BLOCKED`
+- `APPROVAL REQUIRED`
+- `HUMAN ACTION REQUIRED`
+- `DONE`
+
+See [`AGENTS.md`](./AGENTS.md) and [`docs/EXECUTION_MODEL.md`](./docs/EXECUTION_MODEL.md).
 
 ## Core outcome
 
@@ -65,6 +92,8 @@ Opportunity is the default work context. Company is the aggregation context. Int
 
 ## Planning and implementation references
 
+- [`AGENTS.md`](./AGENTS.md) — normative autonomous execution, stop conditions, and communication behavior.
+- [`docs/EXECUTION_MODEL.md`](./docs/EXECUTION_MODEL.md) — control-plane, pull-visibility, exception-driven execution architecture.
 - [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) — durable Lego architecture and provider independence.
 - [`docs/SCREENING_FUNNEL.md`](./docs/SCREENING_FUNNEL.md) — broad discovery, conservative exclusion, gray-zone handling, false-negative audit, and narrow presentation.
 - [`docs/GLASS_COCKPIT.md`](./docs/GLASS_COCKPIT.md) — minimum user-facing information architecture and trust drill-down.
