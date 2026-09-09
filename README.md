@@ -23,15 +23,26 @@ The system discovers broadly below the glass, normalizes and deduplicates signal
 10. A job posting may be the first visible signal, but it is not necessarily the beginning of the pursuit.
 11. Implementation is authorized and currently underway.
 
+## Execution surface: important
+
+GitHub, the specification, the control board, CI, and Supabase provide a durable **control plane**. They preserve truth, state, authority, evidence, and recovery points.
+
+They do **not** make a synchronous chat turn persist after the assistant sends a response.
+
+For implementation that must continue across conversational responses, a persistent **execution plane** is required. The preferred surface is **ChatGPT Work**; a repository-native durable agent/worker is also acceptable.
+
+Ordinary chat is therefore the steering and exception channel. See [`docs/WORK_HANDOFF.md`](./docs/WORK_HANDOFF.md) for the exact persistent-runner handoff.
+
 ## Autonomous execution rule
 
-The default implementation behavior is:
+Within an active execution surface, the default implementation behavior is:
 
 ```text
 TASK INCOMPLETE
 AND no genuine blocker
 AND no approval boundary
 AND no human-only action
+AND execution surface remains active
 => CONTINUE
 ```
 
@@ -92,8 +103,9 @@ Opportunity is the default work context. Company is the aggregation context. Int
 
 ## Planning and implementation references
 
-- [`AGENTS.md`](./AGENTS.md) — normative autonomous execution, stop conditions, and communication behavior.
-- [`docs/EXECUTION_MODEL.md`](./docs/EXECUTION_MODEL.md) — control-plane, pull-visibility, exception-driven execution architecture.
+- [`AGENTS.md`](./AGENTS.md) — normative autonomous execution, stop conditions, execution-surface truth, and communication behavior.
+- [`docs/EXECUTION_MODEL.md`](./docs/EXECUTION_MODEL.md) — control-plane vs execution-plane architecture, pull visibility, and exception-driven execution.
+- [`docs/WORK_HANDOFF.md`](./docs/WORK_HANDOFF.md) — exact handoff for sustained execution in ChatGPT Work or another persistent runner.
 - [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) — durable Lego architecture and provider independence.
 - [`docs/SCREENING_FUNNEL.md`](./docs/SCREENING_FUNNEL.md) — broad discovery, conservative exclusion, gray-zone handling, false-negative audit, and narrow presentation.
 - [`docs/GLASS_COCKPIT.md`](./docs/GLASS_COCKPIT.md) — minimum user-facing information architecture and trust drill-down.
@@ -102,7 +114,8 @@ Opportunity is the default work context. Company is the aggregation context. Int
 
 ## Current runtime direction
 
-- GitHub: public source of truth and CI/CD
+- GitHub: public source of truth and CI/CD control plane
+- ChatGPT Work / durable agent: sustained implementation execution plane
 - GitHub Pages: authenticated single-user cockpit
 - Supabase/PostgreSQL: canonical runtime state, Auth, RLS, provenance, activity
 - React + TypeScript: cockpit
