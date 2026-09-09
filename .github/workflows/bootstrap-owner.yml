@@ -1,0 +1,29 @@
+name: Bootstrap private owner
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-owner.yml'
+permissions:
+  contents: read
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    env:
+      APP_OWNER_EMAIL: ${{ secrets.APP_OWNER_EMAIL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - name: Verify required secrets
+        run: |
+          test -n "$APP_OWNER_EMAIL"
+          test -n "$SUPABASE_SECRET_KEY"
+      - name: Seed hashed owner identity
+        run: |
+          OWNER_HASH=$(printf '%s' "$APP_OWNER_EMAIL" | tr '[:upper:]' '[:lower:]' | sha256sum | cut -d' ' -f1)
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --url 'https://rpgaxevgnzyasysyvnqz.supabase.co/rest/v1/app_config?id=eq.1' \
+            --header "apikey: $SUPABASE_SECRET_KEY" \
+            --header 'Content-Type: application/json' \
+            --header 'Prefer: return=minimal' \
+            --data "{\"owner_email_hash\":\"$OWNER_HASH\"}"
