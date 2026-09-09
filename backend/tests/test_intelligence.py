@@ -149,7 +149,7 @@ def test_rate_limit_retries_same_request_using_reset_hint(monkeypatch: pytest.Mo
 
     assert result["status"] == "completed"
     assert fake.calls == 2
-    assert sleeps == [0.01]
+    assert sleeps == pytest.approx([0.01])
 
 
 def test_non_transient_400_fails_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,7 +193,7 @@ def test_successful_low_remaining_window_paces_next_astra_call(monkeypatch: pyte
     client._post({"model": "gpt-6-astra"})
 
     assert fake.calls == 2
-    assert sleeps == [2.25]
+    assert sleeps == pytest.approx([2.25])
 
 
 def test_large_grounded_astra_response_arms_fallback_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -209,4 +209,4 @@ def test_large_grounded_astra_response_arms_fallback_cooldown(monkeypatch: pytes
     client._post({"model": "gpt-6-astra"})
 
     assert fake.calls == 2
-    assert sleeps == [180.0]
+    assert sleeps == pytest.approx([180.0])
