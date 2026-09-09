@@ -9,7 +9,6 @@ on:
       - 'evals/relevance_golden.json'
       - 'backend/yna/eval_relevance.py'
       - 'backend/yna/triage.py'
-      - 'backend/yna/model_router.py'
 permissions:
   contents: read
 concurrency:
