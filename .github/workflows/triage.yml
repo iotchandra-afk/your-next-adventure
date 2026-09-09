@@ -7,6 +7,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/triage.yml'
+      - 'backend/yna/triage.py'
+      - 'backend/yna/job_detail.py'
+      - 'backend/yna/model_router.py'
+      - 'backend/tests/**'
 permissions:
   contents: read
 concurrency:
