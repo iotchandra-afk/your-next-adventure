@@ -10,7 +10,6 @@ on:
       - 'backend/yna/audit.py'
       - 'backend/yna/triage.py'
       - 'backend/yna/job_detail.py'
-      - 'backend/yna/model_router.py'
       - 'backend/tests/test_audit.py'
 permissions:
   contents: read
