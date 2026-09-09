@@ -7,8 +7,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from .intake import (
     ADAPTERS,
     RawJob,
@@ -17,69 +15,9 @@ from .intake import (
     content_hash,
     normalize_text,
     seed_sources,
-    strip_html,
     utcnow,
 )
 from .screening import POLICY_VERSION, deterministic_screen
-
-
-def _flatten_strings(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [strip_html(value)] if value.strip() else []
-    if isinstance(value, list):
-        out: list[str] = []
-        for item in value:
-            out.extend(_flatten_strings(item))
-        return out
-    if isinstance(value, dict):
-        out: list[str] = []
-        for key, item in value.items():
-            if key.lower() not in {"id", "ref", "url", "applyurl", "company"}:
-                out.extend(_flatten_strings(item))
-        return out
-    return []
-
-
-def enrich_if_needed(source: dict[str, Any], job: RawJob) -> RawJob:
-    stage, _, reason_code, _ = deterministic_screen(job.title)
-    # Keep the recall-first universe cheap. Listing-detail enrichment is useful immediately
-    # for explicit executive-plausible roles. Ambiguous-title roles stay retained below the
-    # glass and are enriched selectively by mandate triage rather than multiplying HTTP calls.
-    if stage != "ELIGIBLE" or reason_code != "EXECUTIVE_SCOPE_PLAUSIBLE" or job.description:
-        return job
-
-    family = source["source_family"]
-    meta = source["metadata"]
-    session = requests.Session()
-    session.headers.update({"User-Agent": "YourNextAdventure/0.1", "Accept": "application/json"})
-
-    try:
-        if family == "WORKDAY":
-            path = job.payload.get("externalPath") or job.external_id
-            base = f"https://{meta['host']}/wday/cxs/{meta['tenant']}/{meta['site']}"
-            response = session.get(f"{base}{path}", timeout=30)
-            response.raise_for_status()
-            detail = response.json()
-            info = detail.get("jobPostingInfo") or detail
-            description = strip_html(info.get("jobDescription") or info.get("description") or "")
-            if description:
-                job.description = description
-                job.payload = {"listing": job.payload, "detail": detail}
-        elif family == "SMARTRECRUITERS":
-            company = meta["company_identifier"]
-            response = session.get(
-                f"https://api.smartrecruiters.com/v1/companies/{company}/postings/{job.external_id}", timeout=30
-            )
-            response.raise_for_status()
-            detail = response.json()
-            sections = (detail.get("jobAd") or {}).get("sections") or {}
-            description = " ".join(x for x in _flatten_strings(sections) if x)
-            if description:
-                job.description = description
-                job.payload = {"listing": job.payload, "detail": detail}
-    except Exception as exc:
-        job.payload = {"listing": job.payload, "enrichment_error": f"{type(exc).__name__}: {exc}"[:500]}
-    return job
 
 
 def prepare_snapshot(source: dict[str, Any], jobs: list[RawJob]) -> tuple[list[dict[str, Any]], int]:
@@ -92,7 +30,6 @@ def prepare_snapshot(source: dict[str, Any], jobs: list[RawJob]) -> tuple[list[d
             repeated += 1
             continue
         seen.add(job.external_id)
-        job = enrich_if_needed(source, job)
         stage, visibility, reason_code, confidence = deterministic_screen(job.title)
         if reason_code == "EXECUTIVE_SCOPE_PLAUSIBLE":
             reason_text = "Plausible executive scope; retained for mandate-aware relevance triage."
@@ -100,6 +37,9 @@ def prepare_snapshot(source: dict[str, Any], jobs: list[RawJob]) -> tuple[list[d
             reason_text = "Title alone is insufficient for a safe rejection; retained below the glass for mandate-aware triage."
         else:
             reason_text = "High-confidence deterministic title exclusion; retained in the auditable hidden universe."
+        # Discovery deliberately stores only what the stable listing endpoint provides.
+        # Provider-specific detail fetches belong to the relevance/intelligence capabilities,
+        # after a role has earned the additional network and reasoning cost.
         prepared.append({
             "external_id": job.external_id,
             "url": job.url or "",
