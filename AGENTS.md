@@ -15,9 +15,25 @@
 
 If implementation is authorized in `SPEC_MANIFEST.json`, agents MUST NOT ask the user to reconfirm ordinary implementation choices already covered by the specification, architecture, prior decisions, or this contract.
 
-## 2. Default execution mode
+## 2. Execution-surface truth
 
-The default action is:
+This contract governs agent behavior **while an execution surface is active**. It does not create persistence by itself.
+
+A synchronous chat turn ends when the assistant sends a response. Repository instructions cannot override that lifecycle. Therefore ordinary chat MUST be treated as a **steering and exception surface**, not as the persistent executor for sustained autonomous work.
+
+Any task expected to continue after an assistant response MUST run on a persistent execution surface, such as:
+
+- ChatGPT Work;
+- a repository-native coding/automation agent;
+- another durable worker that can read this contract, persist state, and resume without a conversational turn.
+
+Agents MUST NOT claim that GitHub, `AGENTS.md`, a control board, or a machine policy alone makes synchronous chat continue after a response. GitHub is the durable **control plane and system of record**; a persistent runner is the **execution plane**.
+
+If sustained autonomous work is requested but the current surface is synchronous chat and no persistent runner is active, that is an execution-surface limitation. The agent may complete as much work as possible in the current turn, but MUST NOT imply that work will continue after the response. If continuation genuinely requires a persistent runner, request the minimum human action needed to enter or authorize that runner.
+
+## 3. Default execution mode
+
+Within an active execution surface, the default action is:
 
 ```text
 TASK INCOMPLETE
@@ -31,7 +47,7 @@ Silence is the default during autonomous execution.
 
 A successful intermediate step is not a reason to return control to the user.
 
-## 3. Do not interrupt for routine execution
+## 4. Do not interrupt for routine execution
 
 Agents MUST NOT return control merely to report:
 
@@ -46,9 +62,9 @@ Agents MUST NOT return control merely to report:
 - an intermediate recommendation that does not require a user decision;
 - a request to "proceed", "continue", or reconfirm already-granted implementation authority.
 
-Checkpoint evidence MUST be persisted to the project control plane and execution MUST continue automatically.
+Checkpoint evidence MUST be persisted to the project control plane and execution MUST continue automatically **when the active execution surface supports continuation**.
 
-## 4. The only autonomous-build stop conditions
+## 5. The only autonomous-build stop conditions
 
 During an active autonomous build or execution task, an unsolicited agent response is permitted only for one of these four conditions.
 
@@ -77,7 +93,7 @@ Routine reversible implementation does not require approval.
 
 ### HUMAN ACTION REQUIRED
 
-A specific action can only be performed by the user and genuinely gates further progress, such as a required interactive sign-in or verification that available tools cannot perform.
+A specific action can only be performed by the user and genuinely gates further progress, such as a required interactive sign-in, verification, or switching to a persistent execution surface that available tools cannot activate.
 
 The request MUST be concrete, minimal, and deferred until the action is actually needed.
 
@@ -87,13 +103,13 @@ The active task's agreed acceptance criteria are satisfied and verified with obs
 
 "Code written", "workflow started", "checkpoint reached", or "mostly complete" is not DONE.
 
-## 5. User-requested questions are different
+## 6. User-requested questions are different
 
 If the user explicitly asks for status, an explanation, a design decision, or another direct answer, answer the question. That is not an unsolicited execution interruption.
 
-After answering, do not ask for permission to resume work that remains authorized.
+After answering, do not ask for permission to resume work that remains authorized. Also do not claim that a synchronous chat will keep executing after the answer. Resume automatically only if a persistent execution surface remains active.
 
-## 6. Checkpoint behavior
+## 7. Checkpoint behavior
 
 Checkpoints are **durable evidence events**, not conversational events.
 
@@ -102,7 +118,7 @@ On checkpoint pass:
 ```text
 verify gate
 -> persist evidence in GitHub / database / CI / control board
--> continue automatically
+-> continue automatically if the execution surface remains active
 -> no user acknowledgement required
 ```
 
@@ -112,21 +128,22 @@ On checkpoint failure:
 diagnose
 -> repair / retry / substitute
 -> rerun verification
--> continue
+-> continue while the execution surface remains active
 ```
 
-Only escalate if the failure becomes one of the stop conditions in Section 4.
+Only escalate if the failure becomes one of the stop conditions in Section 5.
 
-## 7. Failure and uncertainty behavior
+## 8. Failure and uncertainty behavior
 
 - Consequential unknowns fail closed.
 - Recoverable failures are agent work, not user work.
 - Prefer evidence over claims of completion.
 - Bundle genuinely unresolved questions into one escalation rather than interrupting repeatedly.
 - Never manufacture facts, access, completion, or background execution.
+- Never describe a synchronous chat response as a mechanical continuation point. Sending the response ends that chat turn.
 - If an execution environment mechanically terminates a run or tool window, do not reinterpret that limitation as a user approval requirement. Persist state where possible and resume from durable state on the next execution opportunity.
 
-## 8. Control plane
+## 9. Control plane vs execution plane
 
 Execution state belongs in durable project artifacts, not conversational memory.
 
@@ -141,9 +158,11 @@ Use:
 - PostgreSQL/Supabase for runtime state, provenance, and traces;
 - the cockpit for operational and decision visibility.
 
-The chat is a steering and exception channel, not the system of record.
+These form the **control plane**. They do not themselves provide persistent agent execution.
 
-## 9. Communication policy
+Sustained autonomous implementation requires an **execution plane** capable of continuing without a chat response, for example ChatGPT Work or a durable repository-native worker.
+
+## 10. Communication policy
 
 During autonomous execution, unsolicited messages MUST begin with exactly one of:
 
@@ -156,8 +175,8 @@ DONE
 
 No routine `STATUS`, `PROGRESS`, `CHECKPOINT PASS`, or `CONTINUING` messages are permitted.
 
-## 10. Regression rule
+## 11. Regression rule
 
 A repeated behavioral failure MUST become a durable control, test, policy, or fixture rather than remain a conversational reminder.
 
-The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent.
+The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent, including the distinction between control-plane durability and execution-plane persistence.
