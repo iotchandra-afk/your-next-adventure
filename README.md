@@ -25,7 +25,6 @@ The system continuously discovers opportunities, qualifies whether they are wort
 
 > Continuously improve the probability that the candidate lands one of the highest-value mandates available to him, while minimizing unnecessary intervention, preserving truth and accumulated intelligence, and spending AI reasoning only where it materially improves decisions or outcomes.
 
-
 ## Public vs private data
 
 This repository is designed to be safe to keep public.
@@ -77,6 +76,14 @@ See [`PRIVATE_DATA_INJECTION.md`](./PRIVATE_DATA_INJECTION.md).
 - Opportunity search and faceted filtering
 - Shared-state dependency / invalidation controller
 - Reliability, provenance, and auditability
+
+## Planning references
+
+These documents capture the current architecture, UX, and economic direction. They are **non-normative planning references** and do not override `SPEC.md`.
+
+- [`docs/ARCHITECTURE_REFERENCE.md`](./docs/ARCHITECTURE_REFERENCE.md) — Lego architecture, modular domain core, capability contracts, adapters, reconciliation, durable execution, provider independence, observability, and 10-year durability principles.
+- [`docs/GLASS_COCKPIT.md`](./docs/GLASS_COCKPIT.md) — single-pane-of-glass UX, activity stream, progressive disclosure, trust drill-down, connections, health, intervention, and product observability.
+- [`docs/COST_MODEL.md`](./docs/COST_MODEL.md) — red-teamed one-time and recurring costs, staged paid-service adoption, maintenance economics, and FinOps guardrails.
 
 ## Architectural rule
 
