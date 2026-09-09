@@ -148,6 +148,7 @@ def _source_evidence(db: SupabaseREST, opportunity_id: str) -> list[dict[str, An
             "source_name": source.get("display_name"),
             "external_id": record.get("external_id"),
             "canonical_url": record.get("canonical_url"),
+            "content_hash": record.get("content_hash"),
             "state": record.get("state"),
             "last_seen_at": record.get("last_seen_at"),
             "is_primary": link.get("is_primary", False),
@@ -155,16 +156,85 @@ def _source_evidence(db: SupabaseREST, opportunity_id: str) -> list[dict[str, An
     return evidence
 
 
-def _already_triaged(db: SupabaseREST, opportunity_id: str, input_hash: str) -> bool:
+def semantic_input_hash(
+    role: dict[str, Any],
+    company_name: str | None,
+    description: str,
+    sources: list[dict[str, Any]],
+    candidate_version: str,
+    pursuit_policy_version: str,
+) -> str:
+    """Hash only decision-relevant state, never sync timestamps.
+
+    This prevents an unchanged intake heartbeat from spending model tokens or invalidating
+    a durable decision. A content hash, role text, candidate truth version, or pursuit
+    policy version change still forces re-evaluation.
+    """
+    source_fingerprint = sorted(
+        [
+            {
+                "source_family": s.get("source_family"),
+                "external_id": s.get("external_id"),
+                "canonical_url": s.get("canonical_url"),
+                "content_hash": s.get("content_hash"),
+            }
+            for s in sources
+        ],
+        key=lambda x: (str(x.get("source_family")), str(x.get("external_id")), str(x.get("canonical_url"))),
+    )
+    return stable_hash({
+        "company": company_name,
+        "title": role.get("title"),
+        "location": role.get("location"),
+        "description": description[:18000],
+        "posted_at": role.get("posted_at"),
+        "sources": source_fingerprint,
+        "candidate_truth_version": candidate_version,
+        "pursuit_policy_version": pursuit_policy_version,
+        "triage_policy_version": POLICY_VERSION,
+    })
+
+
+def _passed_run(db: SupabaseREST, opportunity_id: str, input_hash: str) -> dict[str, Any] | None:
     rows = db.select("model_runs", {
         "opportunity_id": f"eq.{opportunity_id}",
         "capability": f"eq.{CAPABILITY}",
         "input_hash": f"eq.{input_hash}",
         "status": "eq.PASSED",
-        "select": "id",
+        "select": "id,trace_id,model_class,model_id,reasoning_effort,finished_at",
+        "order": "finished_at.desc",
         "limit": "1",
     })
-    return bool(rows)
+    return rows[0] if rows else None
+
+
+def _reconcile_durable_decision(db: SupabaseREST, role_id: str, run: dict[str, Any]) -> bool:
+    trace_id = run.get("trace_id")
+    if not trace_id:
+        return False
+    decisions = db.select("screening_decisions", {
+        "trace_id": f"eq.{trace_id}",
+        "stage": "eq.MANDATE_RELEVANCE_TRIAGE",
+        "select": "outcome,reason_code,reason_text,confidence,evidence,policy_version",
+        "limit": "1",
+    })
+    if not decisions:
+        return False
+    decision = decisions[0]
+    outcome = decision["outcome"]
+    stage = {"RELEVANT": "TRIAGE_RELEVANT", "POSSIBLE": "TRIAGE_POSSIBLE", "CLEAR_NO": "TRIAGE_CLEAR_NO"}[outcome]
+    visibility = {"RELEVANT": "SURFACED", "POSSIBLE": "GRAY_ZONE", "CLEAR_NO": "HIDDEN"}[outcome]
+    db.patch("opportunities", {"id": f"eq.{role_id}"}, {
+        "screening_stage": stage,
+        "visibility": visibility,
+        "current_reason_code": decision.get("reason_code"),
+        "current_reason_text": decision.get("reason_text"),
+        "current_confidence": decision.get("confidence"),
+        "policy_version": decision.get("policy_version") or POLICY_VERSION,
+        "metadata": {"triage": decision.get("evidence") or {}, "triage_trace_id": trace_id},
+        "updated_at": utcnow(),
+    })
+    return True
 
 
 def _persist_result(
@@ -215,6 +285,14 @@ def triage_one(
     company = _company(db, role["company_id"])
     description = _ensure_description(db, role)
     sources = _source_evidence(db, role["id"])
+    input_hash = semantic_input_hash(
+        role, company.get("display_name"), description, sources,
+        candidate_version, pursuit_policy_version,
+    )
+    passed = _passed_run(db, role["id"], input_hash)
+    if passed and _reconcile_durable_decision(db, role["id"], passed):
+        return "SKIPPED_UNCHANGED"
+
     context = {
         "opportunity": {
             "id": role["id"],
@@ -232,10 +310,6 @@ def triage_one(
         "pursuit_policy": pursuit_policy,
         "pursuit_policy_version": pursuit_policy_version,
     }
-    input_hash = stable_hash(context)
-    if _already_triaged(db, role["id"], input_hash):
-        return "SKIPPED_UNCHANGED"
-
     trace_id = str(uuid.uuid4())
     run = db.insert("model_runs", {
         "capability": CAPABILITY,
