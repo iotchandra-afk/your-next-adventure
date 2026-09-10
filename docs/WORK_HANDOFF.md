@@ -21,9 +21,13 @@ Before changing anything, read and obey, in order:
 3. SPEC_MANIFEST.json
 4. contracts/execution_policy.v1.json
 5. docs/EXECUTION_MODEL.md
-6. GitHub Issue #1 go-live control board
+6. docs/GLASS_COCKPIT.md
+7. docs/DRILLDOWN_ACCEPTANCE.md
+8. GitHub Issue #1 go-live control board
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
+
+P0 usability requirement: the cockpit currently surfaces consequential information but incomplete drill-down remains a product defect. Implement and verify docs/DRILLDOWN_ACCEPTANCE.md before treating cockpit usability as complete.
 
 Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, deployment, test, retry, or debugging messages. Persist evidence to GitHub/control plane and continue.
 
@@ -54,6 +58,7 @@ The persistent runner is considered correctly initialized only after it has:
 - inspected current Supabase runtime state before making state-dependent claims;
 - confirmed that implementation remains authorized;
 - resumed from durable state without asking the user to restate prior decisions;
+- treated `docs/DRILLDOWN_ACCEPTANCE.md` as P0 until verified;
 - avoided a routine progress response.
 
 ## Truth constraint
