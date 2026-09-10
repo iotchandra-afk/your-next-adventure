@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "project": "YourNextAdventure",
+  "status": "NORMATIVE",
+  "invariants": [
+    {
+      "id": "INV-001",
+      "name": "PRIMARY_VIEW_ONLY_CONTAINS_SURFACED_OPPORTUNITIES",
+      "severity": "P0",
+      "rule": "Pre-triage or otherwise hidden working-set roles must not appear as surfaced opportunity recommendations."
+    },
+    {
+      "id": "INV-002",
+      "name": "NULL_DOES_NOT_BECOME_SUBSTANTIVE_DECISION",
+      "severity": "P0",
+      "rule": "Null, missing, stale, failed, or unprocessed state must not be rendered as NEEDS_DATA, RELEVANT, REJECT, MONITOR, TIER_1, TIER_2, or another substantive business outcome."
+    },
+    {
+      "id": "INV-003",
+      "name": "LABELS_MATCH_BACKING_STATE",
+      "severity": "P0",
+      "rule": "Every human-facing count, badge, funnel stage, and label must accurately describe the persisted state/query that backs it."
+    },
+    {
+      "id": "INV-004",
+      "name": "INCOMPLETE_PROCESSING_IS_NOT_ZERO_RESULT",
+      "severity": "P0",
+      "rule": "A zero result must not imply completed assessment when a material upstream or downstream backlog remains unprocessed."
+    },
+    {
+      "id": "INV-005",
+      "name": "STATE_TRANSITIONS_ARE_ORDERED_AND_IDEMPOTENT",
+      "severity": "P0",
+      "rule": "Downstream decisions require valid upstream state; retries and duplicate executions must not create duplicate or contradictory canonical decisions."
+    },
+    {
+      "id": "INV-006",
+      "name": "STALE_RUNNING_WORK_IS_RECOVERABLE",
+      "severity": "P0",
+      "rule": "Work items or model runs may not remain indefinitely RUNNING beyond their lease/timeout; stale work must be detected and safely requeued or terminated."
+    },
+    {
+      "id": "INV-007",
+      "name": "MODEL_CAPACITY_IS_GLOBALLY_COORDINATED",
+      "severity": "P0",
+      "rule": "All model-calling workers must obey shared per-model capacity/backpressure so concurrent workflows cannot independently exhaust the same provider rate budget."
+    },
+    {
+      "id": "INV-008",
+      "name": "DEGRADED_RUNTIME_FAILS_SAFE",
+      "severity": "P0",
+      "rule": "When discovery, triage, qualification, provenance, or model runtime is materially unhealthy, the cockpit must expose the degraded state and avoid misleading recommendation semantics."
+    },
+    {
+      "id": "INV-009",
+      "name": "SOURCE_COVERAGE_IS_NOT_SOURCE_HEALTH",
+      "severity": "P0",
+      "rule": "Healthy configured connectors do not constitute proof of broad-market coverage; coverage and health must remain distinct measures."
+    },
+    {
+      "id": "INV-010",
+      "name": "POSTING_PROVENANCE_REMAINS_REACHABLE",
+      "severity": "P0",
+      "rule": "Any displayed role with a known canonical or discovery URL must retain direct source access and provenance."
+    },
+    {
+      "id": "INV-011",
+      "name": "POSITIVE_AND_NEGATIVE_ASSERTIONS_REQUIRED",
+      "severity": "P0",
+      "rule": "Material changes must test both expected behavior and prohibited behavior, including known-bad semantic outcomes."
+    },
+    {
+      "id": "INV-012",
+      "name": "USER_VISIBLE_ACCEPTANCE_REQUIRES_DEPLOYED_VERIFICATION",
+      "severity": "P0",
+      "rule": "Unit tests or code existence cannot certify user-visible behavior; deployed behavior must be reconciled with canonical runtime state."
+    },
+    {
+      "id": "INV-013",
+      "name": "PRIOR_PASS_REMAINS_FALSIFIABLE",
+      "severity": "P0",
+      "rule": "New contradictory runtime or owner-review evidence automatically invalidates a prior PASS until repaired and reverified."
+    },
+    {
+      "id": "INV-014",
+      "name": "BROAD_DISCOVERY_DOES_NOT_CREATE_INTERNET_DUMP",
+      "severity": "P0",
+      "rule": "Increasing recall at discovery must not bypass screening or broaden the primary human view with unqualified roles."
+    },
+    {
+      "id": "INV-015",
+      "name": "CONTROL_PLANE_WRITES_ARE_AUTONOMOUS",
+      "severity": "P0",
+      "rule": "Routine repository/Supabase control-plane evidence writes within authorized scope are not outbound candidate communication and must not create user approval stops."
+    }
+  ],
+  "release_rule": {
+    "affected_invariants_must_be_identified": true,
+    "negative_assertions_required": true,
+    "runtime_reconciliation_required_when_applicable": true,
+    "deployed_verification_required_for_user_visible_changes": true,
+    "autonomous_repair_or_rollback_before_escalation": true
+  }
+}
