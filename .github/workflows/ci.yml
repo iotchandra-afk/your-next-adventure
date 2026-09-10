@@ -20,6 +20,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: npm install
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
       - run: pip install -r backend/requirements.txt
       - name: Backend regression tests
