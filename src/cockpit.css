@@ -213,6 +213,34 @@
   gap: 16px;
 }
 
+.coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.coverage-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #dbe5df;
+  border-radius: 10px;
+  background: #f7faf8;
+}
+
+.coverage-grid span,
+.coverage-grid small,
+.probe-row small {
+  color: #657a70;
+}
+
+.coverage-grid strong { font-size: 24px; }
+.probe-list { margin-top: 18px; }
+.probe-list h4 { margin: 0; }
+.probe-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #e4ebe7; }
+.probe-row p { margin: 4px 0 0; font-size: 12px; }
+
 .company-card {
   min-width: 0;
 }
@@ -286,4 +314,7 @@
     align-items: flex-start;
     margin-top: 9px;
   }
+
+  .coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .probe-row { display: grid; }
 }
