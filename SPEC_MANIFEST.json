@@ -80,7 +80,7 @@
   "allowed_unsolicited_stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN_ACTION REQUIRED",
+    "HUMAN_ACTION_REQUIRED",
     "DONE"
   ],
   "checkpoint_requires_user_acknowledgement": false,
