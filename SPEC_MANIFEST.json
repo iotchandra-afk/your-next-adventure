@@ -8,11 +8,13 @@
   "machine_execution_policy": "contracts/execution_policy.v1.json",
   "execution_architecture": "docs/EXECUTION_MODEL.md",
   "persistent_execution_handoff": "docs/WORK_HANDOFF.md",
+  "iteration_contract": "docs/ITERATION_CONTRACT.md",
   "human_entrypoint": "README.md",
   "normative_sources": [
     "SPEC.md",
     "AGENTS.md",
-    "contracts/execution_policy.v1.json"
+    "contracts/execution_policy.v1.json",
+    "docs/ITERATION_CONTRACT.md"
   ],
   "acceptance_contracts": {
     "drilldown": {
@@ -24,12 +26,19 @@
       "path": "docs/DISCOVERY_RECALL_ACCEPTANCE.md",
       "priority": "P0",
       "required_before_broad_intake_pass": true
+    },
+    "potency_preserving_iteration": {
+      "path": "docs/ITERATION_CONTRACT.md",
+      "priority": "NORMATIVE",
+      "required_for_persistent_build_runs": true,
+      "reiterate_after_material_slice": true
     }
   },
   "authority_split": {
     "product_requirements": "SPEC.md",
     "autonomous_agent_behavior": "AGENTS.md",
-    "machine_enforcement_contract": "contracts/execution_policy.v1.json"
+    "machine_enforcement_contract": "contracts/execution_policy.v1.json",
+    "iteration_and_red_team_behavior": "docs/ITERATION_CONTRACT.md"
   },
   "execution_surface_policy": {
     "github_role": "CONTROL_PLANE_AND_SYSTEM_OF_RECORD",
@@ -37,7 +46,8 @@
     "persistent_runner_required_for_cross_response_continuation": true,
     "repository_instructions_create_persistence": false,
     "preferred_persistent_surface": "CHATGPT_WORK",
-    "persistent_runner_must_continue_across_internal_engineering_units": true
+    "persistent_runner_must_continue_across_internal_engineering_units": true,
+    "persistent_runner_must_reiterate_across_material_slices": true
   },
   "merge_deploy_policy": {
     "routine_reversible_merge_to_main_requires_approval": false,
@@ -47,9 +57,11 @@
     "destructive_or_materially_irreversible_production_operation_requires_approval": true,
     "pr_ready_is_done": false,
     "ci_passed_is_done": false,
-    "deployment_ready_is_done": false
+    "deployment_ready_is_done": false,
+    "p0_fixed_is_done": false
   },
   "default_execution_action": "CONTINUE",
+  "internal_post_slice_action": "REITERATE",
   "communication_default": "SILENT_UNLESS_STOP_CONDITION",
   "allowed_unsolicited_stop_conditions": [
     "BLOCKED",
