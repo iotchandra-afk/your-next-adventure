@@ -2,17 +2,10 @@
 name: Relevance golden eval
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/relevance-eval.yml'
-      - 'evals/relevance_golden.json'
-      - 'backend/yna/eval_relevance.py'
-      - 'backend/yna/triage.py'
 permissions:
   contents: read
 concurrency:
-  group: model-runtime
+  group: sol-runtime
   cancel-in-progress: false
 jobs:
   eval:

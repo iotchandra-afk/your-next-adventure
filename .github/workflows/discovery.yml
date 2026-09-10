@@ -3,15 +3,10 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '43 */6 * * *'
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/discovery.yml'
 permissions:
   contents: read
 concurrency:
-  group: model-runtime
+  group: sol-runtime
   cancel-in-progress: false
 jobs:
   discover:

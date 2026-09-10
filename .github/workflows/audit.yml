@@ -3,18 +3,10 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '13 */6 * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/audit.yml'
-      - 'backend/yna/audit.py'
-      - 'backend/yna/triage.py'
-      - 'backend/yna/job_detail.py'
-      - 'backend/tests/test_audit.py'
 permissions:
   contents: read
 concurrency:
-  group: model-runtime
+  group: astra-runtime
   cancel-in-progress: false
 jobs:
   audit:

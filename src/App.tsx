@@ -354,7 +354,7 @@ function App() {
         }
       }
     }
-    setCoverage({ direct_sources: direct.length, direct_companies: new Set(direct.map((source) => source.metadata?.company_name).filter(Boolean)).size, market_channels: market.length, market_signals: marketSignals, market_companies: marketCompanies, linked_opportunities: linkedOpportunities, probe_total: probes.length, unresolved_probes: probes.filter((probe) => probe.classification.startsWith('MISSED_') || probe.classification.includes('FAILURE') || probe.classification.startsWith('UNKNOWN')).length, last_market_success: market[0]?.last_success_at ?? null })
+    setCoverage({ direct_sources: direct.length, direct_companies: new Set(direct.map((source) => source.metadata?.company_name).filter(Boolean)).size, market_channels: market.filter((source) => source.health === 'HEALTHY' && source.last_success_at).length, market_signals: marketSignals, market_companies: marketCompanies, linked_opportunities: linkedOpportunities, probe_total: probes.length, unresolved_probes: probes.filter((probe) => probe.classification.startsWith('MISSED_') || probe.classification.includes('FAILURE') || probe.classification.startsWith('UNKNOWN')).length, last_market_success: market.find((source) => source.last_success_at)?.last_success_at ?? null })
     setRecallProbes(probes)
     const awaitingTriage = triageCountResult.count ?? 0
     const awaitingQualification = qualificationCountResult.count ?? 0
@@ -637,10 +637,10 @@ function Home({ summary, pipeline, opportunities, grayZoneCount, actionRequired,
       </section>
       <PipelineStatus pipeline={pipeline} onDrill={onDrill} />
       <div className="metric-grid">
-        <Metric label="Tier 1" value={summary.tier_1} onClick={() => void onDrill('tier_1', 'Tier 1 opportunities', 'Highest-priority surfaced roles first seen in the last 24 hours.')} />
-        <Metric label="Tier 2" value={summary.tier_2} onClick={() => void onDrill('tier_2', 'Tier 2 opportunities', 'Worth-pursuing surfaced roles first seen in the last 24 hours.')} />
-        <Metric label="Monitor" value={summary.monitor} onClick={() => void onDrill('monitor', 'Monitor opportunities', 'Surfaced roles currently held for monitoring and first seen in the last 24 hours.')} />
-        <Metric label="Gray zone · system-held" value={grayZoneCount} onClick={() => void onDrill('gray', 'Gray-zone audit set', 'Ambiguous roles retained for system follow-up rather than hidden as clear-no decisions.')} />
+        <Metric label="Tier 1 · new ≤24h" value={summary.tier_1} onClick={() => void onDrill('tier_1', 'Tier 1 opportunities', 'Highest-priority surfaced roles first seen in the last 24 hours.')} />
+        <Metric label="Tier 2 · new ≤24h" value={summary.tier_2} onClick={() => void onDrill('tier_2', 'Tier 2 opportunities', 'Worth-pursuing surfaced roles first seen in the last 24 hours.')} />
+        <Metric label="Monitor · new ≤24h" value={summary.monitor} onClick={() => void onDrill('monitor', 'Monitor opportunities', 'Surfaced roles currently held for monitoring and first seen in the last 24 hours.')} />
+        <Metric label="Gray zone · current system-held" value={grayZoneCount} onClick={() => void onDrill('gray', 'Gray-zone audit set', 'All currently ambiguous roles retained for system follow-up rather than hidden as clear-no decisions.')} />
       </div>
       <section className="panel">
         <div className="panel-title"><h3>Surfaced opportunities</h3><span>{opportunities.length} visible</span></div>
@@ -672,7 +672,7 @@ function Intake({ summary, pipeline, coverage, recallProbes, sources, opportunit
         <p className="muted">Coverage measures where we look; health measures whether a configured connector ran. These are intentionally separate.</p>
         <div className="coverage-grid" aria-label="Discovery coverage measures">
           <div><span>Direct sources</span><strong>{coverage.direct_sources}</strong><small>{coverage.direct_companies} named employers</small></div>
-          <div><span>Market channels</span><strong>{coverage.market_channels}</strong><small>{coverage.market_companies} companies beyond the registry</small></div>
+          <div><span>Active market channels</span><strong>{coverage.market_channels}</strong><small>successful scan · {coverage.market_companies} linked companies</small></div>
           <div><span>Market signals</span><strong>{coverage.market_signals}</strong><small>{coverage.linked_opportunities} canonical links</small></div>
           <div><span>Recall probes</span><strong>{coverage.probe_total}</strong><small>{coverage.unresolved_probes} unresolved misses</small></div>
         </div>
