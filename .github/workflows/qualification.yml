@@ -3,17 +3,10 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '7 */2 * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/qualification.yml'
-      - 'backend/yna/qualification.py'
-      - 'backend/yna/triage.py'
-      - 'backend/tests/test_qualification.py'
 permissions:
   contents: read
 concurrency:
-  group: model-runtime
+  group: astra-runtime
   cancel-in-progress: false
 jobs:
   qualify:

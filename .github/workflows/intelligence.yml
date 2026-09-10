@@ -4,17 +4,10 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '23 */3 * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/intelligence.yml'
-      - 'backend/yna/intelligence.py'
-      - 'backend/yna/model_router.py'
-      - 'backend/tests/test_intelligence.py'
 permissions:
   contents: read
 concurrency:
-  group: model-runtime
+  group: astra-runtime
   cancel-in-progress: false
 jobs:
   intelligence:

@@ -4,7 +4,6 @@ import pytest
 
 from yna.runtime_capacity import CapacityUnavailable, RuntimeCapacity
 from yna.triage_parallel import validate_batch_decisions
-from yna.triage_parallel import validate_batch_decisions
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,13 +62,25 @@ def test_batch_triage_requires_one_and_only_one_decision_per_claim():
         validate_batch_decisions({"decisions": [{"opportunity_id": "a"}, {"opportunity_id": "outside"}]}, {"a", "b"})
 
 
-def test_all_model_workflows_share_conservative_coarse_group():
-    names = ["discovery.yml", "triage.yml", "qualification.yml", "audit.yml", "intelligence.yml", "relevance-eval.yml", "model-smoke.yml"]
-    for name in names:
+def test_model_workflows_use_per_model_scheduler_lanes_without_push_fanout():
+    lanes = {
+        "discovery.yml": "sol-runtime",
+        "triage.yml": "sol-runtime",
+        "relevance-eval.yml": "sol-runtime",
+        "qualification.yml": "astra-runtime",
+        "audit.yml": "astra-runtime",
+        "intelligence.yml": "astra-runtime",
+        "model-smoke.yml": "model-runtime-smoke",
+    }
+    for name, lane in lanes.items():
         text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-        assert "group: model-runtime" in text
+        assert f"group: {lane}" in text
         assert "cancel-in-progress: false" in text
-    assert "TRIAGE_WORKERS: '1'" in (ROOT / ".github" / "workflows" / "triage.yml").read_text(encoding="utf-8")
+        assert "  push:" not in text
+    triage = (ROOT / ".github" / "workflows" / "triage.yml").read_text(encoding="utf-8")
+    assert "TRIAGE_WORKERS: '1'" in triage
+    assert "TRIAGE_LIMIT: '96'" in triage
+    assert "TRIAGE_BATCH_SIZE: '8'" in triage
 
 
 def test_capacity_migration_is_caller_scoped_and_recovers_stale_runs():
@@ -81,12 +92,3 @@ def test_capacity_migration_is_caller_scoped_and_recovers_stale_runs():
     assert "stale_running_recovered" in sql
     assert "from public, anon, authenticated" in sql
     assert "grant execute" in sql and "to service_role" in sql
-
-
-def test_batch_triage_requires_one_and_only_one_decision_per_claim():
-    decisions = [{"opportunity_id": "a"}, {"opportunity_id": "b"}]
-    assert validate_batch_decisions({"decisions": decisions}, {"a", "b"}) == decisions
-    with pytest.raises(RuntimeError, match="exactly one decision"):
-        validate_batch_decisions({"decisions": [{"opportunity_id": "a"}, {"opportunity_id": "a"}]}, {"a", "b"})
-    with pytest.raises(RuntimeError, match="exactly one decision"):
-        validate_batch_decisions({"decisions": [{"opportunity_id": "a"}, {"opportunity_id": "foreign"}]}, {"a", "b"})
