@@ -24,7 +24,18 @@
     "ordinary_chat_role": "STEERING_AND_EXCEPTIONS_ONLY",
     "persistent_runner_required_for_cross_response_continuation": true,
     "repository_instructions_create_persistence": false,
-    "preferred_persistent_surface": "CHATGPT_WORK"
+    "preferred_persistent_surface": "CHATGPT_WORK",
+    "persistent_runner_must_continue_across_internal_engineering_units": true
+  },
+  "merge_deploy_policy": {
+    "routine_reversible_merge_to_main_requires_approval": false,
+    "routine_reversible_production_deployment_requires_approval": false,
+    "github_pages_deployment_requires_approval": false,
+    "production_label_alone_is_approval_boundary": false,
+    "destructive_or_materially_irreversible_production_operation_requires_approval": true,
+    "pr_ready_is_done": false,
+    "ci_passed_is_done": false,
+    "deployment_ready_is_done": false
   },
   "default_execution_action": "CONTINUE",
   "communication_default": "SILENT_UNLESS_STOP_CONDITION",
