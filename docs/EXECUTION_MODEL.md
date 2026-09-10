@@ -50,6 +50,7 @@ AI executes
   -> durable state changes
   -> tests / evals / traces
   -> checkpoint evidence persisted
+  -> safe authorized merge/deploy if applicable
   -> AI continues automatically
 
 Human interaction occurs only when:
@@ -129,12 +130,45 @@ A checkpoint does not require user acknowledgement.
 checkpoint passes
   -> write evidence
   -> advance state
+  -> take next safe authorized action
   -> continue if the execution surface remains active
 ```
 
 Human acknowledgement is not part of the state transition unless the checkpoint itself contains a reserved approval boundary.
 
-## 8. Failure behavior
+A PR becoming merge-ready, CI becoming green, or a deployment becoming ready is therefore an internal execution event, not a human approval event.
+
+## 8. Routine production changes vs destructive production changes
+
+The word **production** does not automatically imply an approval boundary.
+
+For this project, these are routine autonomous actions when they stay inside approved scope, required checks pass, no reserved boundary changes, and normal rollback exists:
+
+- update/rebase an implementation branch;
+- resolve routine non-consequential conflicts;
+- merge or squash-merge an implementation PR to `main`;
+- deploy the cockpit to GitHub Pages from `main`;
+- verify the deployment;
+- apply additive/non-destructive migrations already required by the approved architecture.
+
+A persistent runner should therefore treat the sequence below as one uninterrupted execution path:
+
+```text
+implement
+-> test
+-> PR/checkpoint
+-> update branch if needed
+-> merge
+-> deploy
+-> verify
+-> continue to next unmet acceptance criterion
+```
+
+Approval is required only for a **destructive or materially irreversible** production operation or another reserved boundary. Examples include dropping production data without a verified recovery path, irreversibly rewriting canonical runtime state, weakening a security boundary, sending an external communication, making a material paid commitment, or submitting a final job application.
+
+This distinction prevents a generic safety instinct around the word "production" from manufacturing unnecessary approval stops.
+
+## 9. Failure behavior
 
 Recoverable failures remain inside the autonomous execution envelope.
 
@@ -142,25 +176,44 @@ The system should:
 
 1. diagnose;
 2. retry when safe;
-3. use an alternate provider/adapter/strategy when supported;
-4. preserve evidence and state;
-5. escalate only if autonomous remediation is exhausted and the failure now matches a stop condition.
+3. update/rebase stale branches and resolve routine conflicts;
+4. use an alternate provider/adapter/strategy when supported;
+5. preserve evidence and state;
+6. escalate only if autonomous remediation is exhausted and the failure now matches a stop condition.
 
 Consequential uncertainty fails closed rather than inventing facts or authority.
 
-## 9. Human authority boundaries
+## 10. Human authority boundaries
 
 The user retains control over consequential side effects:
 
 - material new paid commitments;
-- destructive production actions;
+- destructive or materially irreversible production actions;
 - security-boundary changes;
 - outbound communications;
 - final job-application submission.
 
 A human-only authentication, verification, or execution-surface switch may also be requested when no available tool can perform it and it blocks further autonomous work.
 
-## 10. Regression philosophy
+Routine reversible merge/deploy activity is explicitly outside this list.
+
+## 11. Completion semantics
+
+The delegated task, not the current engineering artifact, defines DONE.
+
+The following are never sufficient by themselves when broader authorized scope remains:
+
+- code written;
+- PR opened;
+- PR ready;
+- CI passed;
+- deployment ready;
+- deployment completed;
+- checkpoint passed.
+
+A persistent runner should decompose the remaining scope and continue rather than voluntarily terminating after one bounded engineering unit.
+
+## 12. Regression philosophy
 
 Behavioral failures are engineering failures when they recur.
 
