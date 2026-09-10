@@ -55,6 +55,7 @@ Agents MUST NOT return control merely to report:
 - a checkpoint passing;
 - commits, merges, migrations, deployments, or tests succeeding;
 - a pull request becoming review-ready or merge-ready;
+- creating or updating a pull request, issue, issue comment, PR body, control-board entry, or other project-control evidence inside this repository;
 - a routine merge to `main` or a routine deployment becoming ready to execute;
 - routine implementation choices covered by existing architecture;
 - recoverable errors or retries;
@@ -88,13 +89,36 @@ The next action crosses an explicitly reserved approval boundary:
 - a new material paid service or commitment;
 - a **destructive or materially irreversible** production operation;
 - a security-boundary change;
-- sending an outbound communication;
+- sending an outbound communication **to a person or external audience outside the project's own control plane**;
 - final job-application submission.
+
+#### Outbound communication boundary: exact meaning
+
+`OUTBOUND_COMMUNICATION_SEND` means a human-facing communication sent outside the project's own GitHub/Supabase control plane, for example:
+
+- email to a recruiter, hiring manager, employer, networking contact, or other external person;
+- LinkedIn/Slack/WhatsApp/SMS/social message or post to an external audience;
+- application free text or other candidate representation transmitted to an employer;
+- any communication that presents the candidate to another person or organization.
+
+It **does not** include routine project-control writes performed inside `iotchandra-afk/your-next-adventure`, including:
+
+- creating, updating, or closing a pull request;
+- writing or editing a PR title/body;
+- creating, updating, commenting on, or closing a GitHub issue;
+- persisting implementation evidence, checkpoint evidence, decision logs, or verification results;
+- updating the go-live control board;
+- creating commits, branches, tags, or other repository-native implementation metadata;
+- writing runtime evidence to the project's authorized Supabase control/runtime state.
+
+These are **internal control-plane mutations**, not outbound candidate communication. They are autonomous when within already-authorized scope, contain no prohibited private data/secrets, and do not independently cross another reserved approval boundary.
 
 **Production is not synonymous with destructive.** A routine, reversible production change inside the already-authorized architecture is autonomous work, not an approval boundary.
 
 The following MUST proceed without asking the user for approval when they are within already-authorized scope, required checks pass, no reserved boundary changes, and a normal rollback path exists:
 
+- creating or updating implementation PRs and their titles/bodies;
+- creating/updating GitHub issues, issue comments, and control-board evidence;
 - updating/rebasing an implementation branch against `main`;
 - resolving routine merge conflicts that do not change product intent or a reserved boundary;
 - squash-merging or otherwise merging an implementation PR to `main`;
@@ -104,7 +128,7 @@ The following MUST proceed without asking the user for approval when they are wi
 
 If a PR becomes non-mergeable because `main` advanced, the agent MUST repair/update the branch, rerun the required checks, merge when safe, verify the deployment, and continue. It MUST NOT convert ordinary branch drift into a user approval request.
 
-Approval is required only when the operation itself is materially destructive/irreversible or crosses another reserved boundary. Examples include dropping production data without a verified recovery path, an irreversible rewrite of canonical runtime state, weakening a security boundary, or introducing a new material paid commitment.
+Approval is required only when the operation itself is materially destructive/irreversible or crosses another reserved boundary. Examples include dropping production data without a verified recovery path, an irreversible rewrite of canonical runtime state, weakening a security boundary, introducing a new material paid commitment, or sending candidate-facing communication to an external person or organization.
 
 ### HUMAN ACTION REQUIRED
 
@@ -135,7 +159,7 @@ On checkpoint pass:
 ```text
 verify gate
 -> persist evidence in GitHub / database / CI / control board
--> perform the next safe authorized action, including merge/deploy where applicable
+-> perform the next safe authorized action, including control-plane writes, merge/deploy where applicable
 -> continue automatically if the execution surface remains active
 -> no user acknowledgement required
 ```
@@ -172,12 +196,12 @@ Use:
 - `AGENTS.md` for autonomous operating behavior;
 - `SPEC_MANIFEST.json` for authority and document binding;
 - `contracts/execution_policy.v1.json` for machine-readable communication policy;
-- GitHub issues / control board for checkpoint evidence;
+- GitHub issues / PRs / control board for checkpoint and implementation evidence;
 - CI and evals for proof;
 - PostgreSQL/Supabase for runtime state, provenance, and traces;
 - the cockpit for operational and decision visibility.
 
-These form the **control plane**. They do not themselves provide persistent agent execution.
+These form the **control plane**. Writing to them as part of authorized implementation is internal project execution, not external outbound communication. They do not themselves provide persistent agent execution.
 
 Sustained autonomous implementation requires an **execution plane** capable of continuing without a chat response, for example ChatGPT Work or a durable repository-native worker.
 
@@ -198,4 +222,4 @@ No routine `STATUS`, `PROGRESS`, `CHECKPOINT PASS`, `PR READY`, `DEPLOYMENT READ
 
 A repeated behavioral failure MUST become a durable control, test, policy, or fixture rather than remain a conversational reminder.
 
-The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent, including the distinction between control-plane durability and execution-plane persistence and the rule that routine reversible merges/deployments are autonomous rather than approval-gated.
+The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent, including the distinction between control-plane durability and execution-plane persistence, the rule that routine reversible merges/deployments are autonomous rather than approval-gated, and the rule that repository-native GitHub control-plane writes are not `OUTBOUND_COMMUNICATION_SEND`.
