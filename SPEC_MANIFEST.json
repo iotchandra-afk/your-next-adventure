@@ -2,7 +2,7 @@
   "project": "YourNextAdventure",
   "status": "BUILDING",
   "implementation_authorized": true,
-  "authority_reconciled_at": "2026-09-09",
+  "authority_reconciled_at": "2026-09-10",
   "canonical_spec": "SPEC.md",
   "execution_contract": "AGENTS.md",
   "machine_execution_policy": "contracts/execution_policy.v1.json",
@@ -14,6 +14,18 @@
     "AGENTS.md",
     "contracts/execution_policy.v1.json"
   ],
+  "acceptance_contracts": {
+    "drilldown": {
+      "path": "docs/DRILLDOWN_ACCEPTANCE.md",
+      "priority": "P0",
+      "required_before_cockpit_usable": true
+    },
+    "discovery_recall": {
+      "path": "docs/DISCOVERY_RECALL_ACCEPTANCE.md",
+      "priority": "P0",
+      "required_before_broad_intake_pass": true
+    }
+  },
   "authority_split": {
     "product_requirements": "SPEC.md",
     "autonomous_agent_behavior": "AGENTS.md",
