@@ -64,6 +64,14 @@ The delegated task is the full authorized go-live scope, NOT the completion of o
 
 Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, PR-ready, merge-ready, deployment-ready, test, retry, debugging, or reiteration messages. Persist evidence to GitHub/control plane and continue.
 
+IMPORTANT CONTROL-PLANE WRITE RULE:
+- `OUTBOUND_COMMUNICATION_SEND` means human-facing communication to a person or external audience outside this project's control plane;
+- creating/updating a GitHub PR, PR title/body, GitHub issue, issue/PR control-plane comment, control-board entry, implementation evidence, commit, branch, tag, or authorized Supabase runtime evidence is NOT outbound candidate communication;
+- these project-control writes are routine autonomous actions when inside authorized scope, contain no prohibited private candidate data/secrets, and cross no other reserved boundary;
+- do NOT ask the user to approve creating a PR or writing its implementation/evidence body;
+- do NOT ask the user to approve an issue/comment merely because another human could technically read the public repository;
+- public-repository privacy rules still apply: never put private candidate data or secrets into those writes.
+
 IMPORTANT MERGE/DEPLOY RULE:
 - "production" is not by itself an approval boundary;
 - routine reversible merges to main are autonomous when within authorized scope, required checks pass, no reserved boundary changes, and normal rollback exists;
@@ -71,7 +79,7 @@ IMPORTANT MERGE/DEPLOY RULE:
 - additive/non-destructive schema migrations already required by the approved architecture are autonomous;
 - if an open PR is stale or non-mergeable because main advanced, update/rebase it, resolve routine conflicts, rerun checks, merge when safe, verify deployment, and continue;
 - do NOT ask the user to approve a squash merge or ordinary Pages deployment merely because it is production;
-- PR ready, CI passed, merge ready, deployment ready, deployment complete, P0 fixed, and checkpoint passed are internal execution events, not DONE.
+- PR created, PR ready, CI passed, merge ready, deployment ready, deployment complete, P0 fixed, and checkpoint passed are internal execution events, not DONE.
 
 Only destructive/materially irreversible production operations remain approval-gated, along with the other reserved boundaries below.
 
@@ -85,7 +93,7 @@ Reserved approval boundaries are exactly:
 - new material paid service or commitment
 - destructive or materially irreversible production operation
 - security-boundary change
-- outbound communication send
+- outbound communication to a person/external audience outside the project control plane
 - final job-application submission
 
 Never put private candidate data or secrets into the public repository.
@@ -109,6 +117,7 @@ The persistent runner is considered correctly initialized only after it has:
 - applied the whole-system red-team and reiteration loop after material slices;
 - treated prior checkpoint PASS decisions as falsifiable when new evidence contradicts them;
 - refused to weaken requirements or replace end-to-end verification with easier proxy evidence;
+- recognized that repository-native PR/issue/comment/control-board writes are internal control-plane actions, not `OUTBOUND_COMMUNICATION_SEND`;
 - treated routine reversible PR merge and GitHub Pages deployment as autonomous actions, not approval boundaries;
 - recognized that PR/CI/deploy/P0 completion is not project completion;
 - avoided a routine progress or reiteration response.
