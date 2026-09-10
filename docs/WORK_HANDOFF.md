@@ -24,12 +24,26 @@ Before changing anything, read and obey, in order:
 6. docs/GLASS_COCKPIT.md
 7. docs/DRILLDOWN_ACCEPTANCE.md
 8. GitHub Issue #1 go-live control board
+9. GitHub Issue #3 P0 drill-down defect
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
 
 P0 usability requirement: the cockpit currently surfaces consequential information but incomplete drill-down remains a product defect. Implement and verify docs/DRILLDOWN_ACCEPTANCE.md before treating cockpit usability as complete.
 
-Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, deployment, test, retry, or debugging messages. Persist evidence to GitHub/control plane and continue.
+The delegated task is the full authorized go-live scope, NOT the completion of one PR, one CI run, one deployment, one checkpoint, or one engineering time slice.
+
+Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, PR-ready, merge-ready, deployment-ready, test, retry, or debugging messages. Persist evidence to GitHub/control plane and continue.
+
+IMPORTANT MERGE/DEPLOY RULE:
+- "production" is not by itself an approval boundary;
+- routine reversible merges to main are autonomous when within authorized scope, required checks pass, no reserved boundary changes, and normal rollback exists;
+- routine GitHub Pages deployments triggered from main are autonomous under the same conditions;
+- additive/non-destructive schema migrations already required by the approved architecture are autonomous;
+- if an open PR is stale or non-mergeable because main advanced, update/rebase it, resolve routine conflicts, rerun checks, merge when safe, verify deployment, and continue;
+- do NOT ask the user to approve a squash merge or ordinary Pages deployment merely because it is production;
+- PR ready, CI passed, merge ready, deployment ready, and deployment complete are internal checkpoints, not DONE.
+
+Only destructive/materially irreversible production operations remain approval-gated, along with the other reserved boundaries below.
 
 Return to the user only for exactly one of:
 BLOCKED
@@ -37,16 +51,16 @@ APPROVAL REQUIRED
 HUMAN ACTION REQUIRED
 DONE
 
-Reserved approval boundaries remain:
+Reserved approval boundaries are exactly:
 - new material paid service or commitment
-- destructive production operation
+- destructive or materially irreversible production operation
 - security-boundary change
 - outbound communication send
 - final job-application submission
 
 Never put private candidate data or secrets into the public repository.
 
-Continue through the established go-live checkpoints and specifications until a real stop condition is reached.
+Continue through the established go-live checkpoints and specifications until a real stop condition is reached. Do not voluntarily stop because an internal engineering unit completed. If the persistent execution environment remains active, decompose the next unmet acceptance criterion and keep working.
 ```
 
 ## Handoff acceptance test
@@ -54,13 +68,17 @@ Continue through the established go-live checkpoints and specifications until a 
 The persistent runner is considered correctly initialized only after it has:
 
 - read the normative files above;
-- inspected current `main`, open/active workflow runs, and Issue #1;
+- inspected current `main`, open/active PRs and workflow runs, Issue #1, and Issue #3;
 - inspected current Supabase runtime state before making state-dependent claims;
 - confirmed that implementation remains authorized;
 - resumed from durable state without asking the user to restate prior decisions;
 - treated `docs/DRILLDOWN_ACCEPTANCE.md` as P0 until verified;
+- treated routine reversible PR merge and GitHub Pages deployment as autonomous actions, not approval boundaries;
+- recognized that PR/CI/deploy completion is not project completion;
 - avoided a routine progress response.
 
 ## Truth constraint
 
 No agent may claim that work will continue after a synchronous chat response unless a persistent execution runner is actually active.
+
+A Work run may still be interrupted by a real product/tool limitation, sign-in requirement, unsupported action, or usage constraint. Such a limitation must be described truthfully as the actual blocker; it must never be relabeled as a user approval requirement simply to create a stopping point.
