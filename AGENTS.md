@@ -54,6 +54,8 @@ Agents MUST NOT return control merely to report:
 - progress or percentages;
 - a checkpoint passing;
 - commits, merges, migrations, deployments, or tests succeeding;
+- a pull request becoming review-ready or merge-ready;
+- a routine merge to `main` or a routine deployment becoming ready to execute;
 - routine implementation choices covered by existing architecture;
 - recoverable errors or retries;
 - debugging progress;
@@ -84,12 +86,25 @@ Before escalating, the agent MUST attempt reasonable remediation and alternative
 The next action crosses an explicitly reserved approval boundary:
 
 - a new material paid service or commitment;
-- a destructive production operation;
+- a **destructive or materially irreversible** production operation;
 - a security-boundary change;
 - sending an outbound communication;
 - final job-application submission.
 
-Routine reversible implementation does not require approval.
+**Production is not synonymous with destructive.** A routine, reversible production change inside the already-authorized architecture is autonomous work, not an approval boundary.
+
+The following MUST proceed without asking the user for approval when they are within already-authorized scope, required checks pass, no reserved boundary changes, and a normal rollback path exists:
+
+- updating/rebasing an implementation branch against `main`;
+- resolving routine merge conflicts that do not change product intent or a reserved boundary;
+- squash-merging or otherwise merging an implementation PR to `main`;
+- a GitHub Pages deployment triggered by `main`;
+- verification of that deployment;
+- additive/non-destructive schema migrations already required by the approved architecture.
+
+If a PR becomes non-mergeable because `main` advanced, the agent MUST repair/update the branch, rerun the required checks, merge when safe, verify the deployment, and continue. It MUST NOT convert ordinary branch drift into a user approval request.
+
+Approval is required only when the operation itself is materially destructive/irreversible or crosses another reserved boundary. Examples include dropping production data without a verified recovery path, an irreversible rewrite of canonical runtime state, weakening a security boundary, or introducing a new material paid commitment.
 
 ### HUMAN ACTION REQUIRED
 
@@ -101,7 +116,9 @@ The request MUST be concrete, minimal, and deferred until the action is actually
 
 The active task's agreed acceptance criteria are satisfied and verified with observable evidence.
 
-"Code written", "workflow started", "checkpoint reached", or "mostly complete" is not DONE.
+"Code written", "PR opened", "PR ready", "CI passed", "deployment ready", "workflow started", "checkpoint reached", or "mostly complete" is not DONE when broader authorized scope remains.
+
+A PR is an internal unit of work, not the project deliverable. After a safe merge/deployment, the agent MUST continue to the next unmet acceptance criterion without returning control.
 
 ## 6. User-requested questions are different
 
@@ -118,6 +135,7 @@ On checkpoint pass:
 ```text
 verify gate
 -> persist evidence in GitHub / database / CI / control board
+-> perform the next safe authorized action, including merge/deploy where applicable
 -> continue automatically if the execution surface remains active
 -> no user acknowledgement required
 ```
@@ -141,6 +159,7 @@ Only escalate if the failure becomes one of the stop conditions in Section 5.
 - Bundle genuinely unresolved questions into one escalation rather than interrupting repeatedly.
 - Never manufacture facts, access, completion, or background execution.
 - Never describe a synchronous chat response as a mechanical continuation point. Sending the response ends that chat turn.
+- Do not voluntarily terminate a persistent Work run merely because one engineering unit, PR, checkpoint, or deployment completed. Decompose the remaining authorized scope and continue within the active run.
 - If an execution environment mechanically terminates a run or tool window, do not reinterpret that limitation as a user approval requirement. Persist state where possible and resume from durable state on the next execution opportunity.
 
 ## 9. Control plane vs execution plane
@@ -173,10 +192,10 @@ HUMAN ACTION REQUIRED
 DONE
 ```
 
-No routine `STATUS`, `PROGRESS`, `CHECKPOINT PASS`, or `CONTINUING` messages are permitted.
+No routine `STATUS`, `PROGRESS`, `CHECKPOINT PASS`, `PR READY`, `DEPLOYMENT READY`, or `CONTINUING` messages are permitted.
 
 ## 11. Regression rule
 
 A repeated behavioral failure MUST become a durable control, test, policy, or fixture rather than remain a conversational reminder.
 
-The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent, including the distinction between control-plane durability and execution-plane persistence.
+The repository CI MUST validate that this execution contract and its machine-readable policy remain present and internally consistent, including the distinction between control-plane durability and execution-plane persistence and the rule that routine reversible merges/deployments are autonomous rather than approval-gated.
