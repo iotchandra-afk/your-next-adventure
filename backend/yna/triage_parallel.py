@@ -158,8 +158,10 @@ def run() -> int:
     candidate, pursuit_policy, candidate_version, pursuit_policy_version = _private_context(db)
     roles = _eligible_roles(db, limit)
     results = {"RELEVANT": 0, "POSSIBLE": 0, "CLEAR_NO": 0, "FAILED": 0}
+    attempted = 0
     for start in range(0, len(roles), batch_size):
         batch = roles[start:start + batch_size]
+        attempted += len(batch)
         try:
             for outcome in triage_batch(db, ai, batch, candidate, pursuit_policy, candidate_version, pursuit_policy_version):
                 results[outcome] += 1
@@ -171,13 +173,19 @@ def run() -> int:
                 "message": "A claimed triage batch failed; every role remains awaiting triage for idempotent retry.",
                 "details": {"opportunity_ids": [role["id"] for role in batch], "error": f"{type(exc).__name__}: {exc}"[:1000]},
             })
+            # A batch-level provider or schema failure is shared evidence about the
+            # worker, not eight independent role outcomes. Stop claiming more work;
+            # later roles remain untouched and the scheduler can retry after recovery.
+            break
+    evaluated = results["RELEVANT"] + results["POSSIBLE"] + results["CLEAR_NO"]
+    unclaimed = len(roles) - attempted
     db.insert("activity_events", {
         "event_type": "RELEVANCE_TRIAGE_BATCH_COMPLETED",
         "severity": "INFO" if results["FAILED"] == 0 else "ATTENTION",
-        "message": f"Mandate relevance triage evaluated {len(roles) - results['FAILED']} of {len(roles)} claimed roles.",
-        "details": {**results, "batch_size": batch_size, "limit": limit},
+        "message": f"Mandate relevance triage evaluated {evaluated} of {attempted} attempted roles; {unclaimed} selected roles remained unclaimed.",
+        "details": {**results, "selected": len(roles), "attempted": attempted, "evaluated": evaluated, "unclaimed": unclaimed, "batch_size": batch_size, "limit": limit},
     })
-    print(json.dumps({**results, "batch_size": batch_size, "limit": limit}, sort_keys=True))
+    print(json.dumps({**results, "selected": len(roles), "attempted": attempted, "evaluated": evaluated, "unclaimed": unclaimed, "batch_size": batch_size, "limit": limit}, sort_keys=True))
     return 0 if results["FAILED"] == 0 else 2
 
 
