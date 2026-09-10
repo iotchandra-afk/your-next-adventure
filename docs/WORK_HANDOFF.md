@@ -1,6 +1,6 @@
 # Persistent Execution Handoff
 
-**Purpose:** move sustained YourNextAdventure implementation from synchronous chat into a persistent execution surface without losing product intent, authority, or stop conditions.
+**Purpose:** move sustained YourNextAdventure implementation from synchronous chat into a persistent execution surface without losing product intent, authority, stop conditions, or product potency across repeated implementation cycles.
 
 ## Preferred execution surface
 
@@ -22,11 +22,12 @@ Before changing anything, read and obey, in order:
 4. contracts/execution_policy.v1.json
 5. docs/EXECUTION_MODEL.md
 6. docs/GLASS_COCKPIT.md
-7. docs/DRILLDOWN_ACCEPTANCE.md
-8. docs/DISCOVERY_RECALL_ACCEPTANCE.md
-9. GitHub Issue #1 go-live control board
-10. GitHub Issue #3 P0 drill-down defect
-11. GitHub Issue #4 P0 broad-market discovery recall defect
+7. docs/ITERATION_CONTRACT.md
+8. docs/DRILLDOWN_ACCEPTANCE.md
+9. docs/DISCOVERY_RECALL_ACCEPTANCE.md
+10. GitHub Issue #1 go-live control board
+11. GitHub Issue #3 P0 drill-down defect
+12. GitHub Issue #4 P0 broad-market discovery recall defect
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
 
@@ -49,9 +50,19 @@ P0-B — BROAD-MARKET DISCOVERY RECALL
 - source coverage and source health are different metrics;
 - do not certify CP2 broad discovery PASS until recall acceptance is satisfied.
 
-The delegated task is the full authorized go-live scope, NOT the completion of one PR, one CI run, one deployment, one checkpoint, or one engineering time slice.
+POTENCY-PRESERVING REITERATION IS MANDATORY:
+- fixing P0-A and P0-B is not the end of the run;
+- after every material slice, execute docs/ITERATION_CONTRACT.md;
+- re-read current authority, inspect current main/runtime/deployed product, and re-evaluate the WHOLE product against the core objective;
+- red-team prior PASS claims and reopen them when new evidence disproves them;
+- identify the highest-value remaining weakness across the entire authorized scope, not merely the files or issue just touched;
+- implement the next end-to-end slice, verify with real data and deployed behavior, persist evidence, then reiterate again;
+- do not weaken requirements, narrow scope, substitute proxy metrics, or optimize for easy checklist completion merely to reach DONE;
+- `REITERATE` is an internal execution action, never a user-facing status message.
 
-Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, PR-ready, merge-ready, deployment-ready, test, retry, or debugging messages. Persist evidence to GitHub/control plane and continue.
+The delegated task is the full authorized go-live scope, NOT the completion of one PR, one CI run, one deployment, one checkpoint, one defect, or one engineering time slice.
+
+Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, PR-ready, merge-ready, deployment-ready, test, retry, debugging, or reiteration messages. Persist evidence to GitHub/control plane and continue.
 
 IMPORTANT MERGE/DEPLOY RULE:
 - "production" is not by itself an approval boundary;
@@ -60,7 +71,7 @@ IMPORTANT MERGE/DEPLOY RULE:
 - additive/non-destructive schema migrations already required by the approved architecture are autonomous;
 - if an open PR is stale or non-mergeable because main advanced, update/rebase it, resolve routine conflicts, rerun checks, merge when safe, verify deployment, and continue;
 - do NOT ask the user to approve a squash merge or ordinary Pages deployment merely because it is production;
-- PR ready, CI passed, merge ready, deployment ready, and deployment complete are internal checkpoints, not DONE.
+- PR ready, CI passed, merge ready, deployment ready, deployment complete, P0 fixed, and checkpoint passed are internal execution events, not DONE.
 
 Only destructive/materially irreversible production operations remain approval-gated, along with the other reserved boundaries below.
 
@@ -79,14 +90,14 @@ Reserved approval boundaries are exactly:
 
 Never put private candidate data or secrets into the public repository.
 
-Continue through the established go-live checkpoints and specifications until a real stop condition is reached. Do not voluntarily stop because an internal engineering unit completed. If the persistent execution environment remains active, decompose the next unmet acceptance criterion and keep working.
+Continue through the established go-live checkpoints and specifications until a real stop condition is reached. Do not voluntarily stop because an internal engineering unit completed. If the persistent execution environment remains active, execute the potency-preserving iteration loop and begin the next highest-value unmet requirement.
 ```
 
 ## Handoff acceptance test
 
 The persistent runner is considered correctly initialized only after it has:
 
-- read the normative files above;
+- read the normative files above, including `docs/ITERATION_CONTRACT.md`;
 - inspected current `main`, open/active PRs and workflow runs, Issue #1, Issue #3, and Issue #4;
 - inspected current Supabase runtime state before making state-dependent claims;
 - confirmed that implementation remains authorized;
@@ -94,9 +105,13 @@ The persistent runner is considered correctly initialized only after it has:
 - treated `docs/DRILLDOWN_ACCEPTANCE.md` as P0 until verified;
 - treated `docs/DISCOVERY_RECALL_ACCEPTANCE.md` as P0 until verified;
 - recognized that working ATS adapters do not by themselves prove broad-market recall;
+- recognized that fixing the current P0s does not end the run;
+- applied the whole-system red-team and reiteration loop after material slices;
+- treated prior checkpoint PASS decisions as falsifiable when new evidence contradicts them;
+- refused to weaken requirements or replace end-to-end verification with easier proxy evidence;
 - treated routine reversible PR merge and GitHub Pages deployment as autonomous actions, not approval boundaries;
-- recognized that PR/CI/deploy completion is not project completion;
-- avoided a routine progress response.
+- recognized that PR/CI/deploy/P0 completion is not project completion;
+- avoided a routine progress or reiteration response.
 
 ## Truth constraint
 
