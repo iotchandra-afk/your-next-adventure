@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: astra-runtime
+  group: model-runtime
   cancel-in-progress: false
 jobs:
   intelligence:

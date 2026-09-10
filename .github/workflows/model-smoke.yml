@@ -7,11 +7,16 @@ on:
       - '.github/workflows/model-smoke.yml'
 permissions:
   contents: read
+concurrency:
+  group: model-runtime
+  cancel-in-progress: false
 jobs:
   models:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PYTHONPATH: backend
     steps:

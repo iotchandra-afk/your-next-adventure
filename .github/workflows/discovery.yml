@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: broad-market-discovery
+  group: model-runtime
   cancel-in-progress: false
 jobs:
   discover:

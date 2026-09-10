@@ -137,7 +137,7 @@ def _fake_clock(monkeypatch: pytest.MonkeyPatch) -> tuple[list[float], dict[str,
 
 
 def test_rate_limit_retries_same_request_using_reset_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OpenAIResponses(api_key="test")
+    client = OpenAIResponses(api_key="test", capacity=None)
     fake = _FakeSession([
         _FakeResponse(429, headers={"x-ratelimit-reset-tokens": "0.01s"}),
         _FakeResponse(200, body={"status": "completed"}),
@@ -153,7 +153,7 @@ def test_rate_limit_retries_same_request_using_reset_hint(monkeypatch: pytest.Mo
 
 
 def test_non_transient_400_fails_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OpenAIResponses(api_key="test")
+    client = OpenAIResponses(api_key="test", capacity=None)
     fake = _FakeSession([_FakeResponse(400)])
     client.http = fake  # type: ignore[assignment]
     sleeps, _ = _fake_clock(monkeypatch)
@@ -173,7 +173,7 @@ def test_rate_limit_duration_parser_handles_compound_reset_headers() -> None:
 
 
 def test_successful_low_remaining_window_paces_next_astra_call(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OpenAIResponses(api_key="test")
+    client = OpenAIResponses(api_key="test", capacity=None)
     fake = _FakeSession([
         _FakeResponse(
             200,
@@ -197,7 +197,7 @@ def test_successful_low_remaining_window_paces_next_astra_call(monkeypatch: pyte
 
 
 def test_large_grounded_astra_response_arms_fallback_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OpenAIResponses(api_key="test")
+    client = OpenAIResponses(api_key="test", capacity=None)
     fake = _FakeSession([
         _FakeResponse(200, body={"status": "completed", "usage": {"input_tokens": 40000, "output_tokens": 2000}}),
         _FakeResponse(200, body={"status": "completed"}),

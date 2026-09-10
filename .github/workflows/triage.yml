@@ -2,7 +2,7 @@ name: Mandate relevance triage
 on:
   workflow_dispatch:
   schedule:
-    - cron: '41 * * * *'
+    - cron: '11,26,41,56 * * * *'
   push:
     branches: [main]
     paths:
@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: sol-runtime
+  group: model-runtime
   cancel-in-progress: false
 jobs:
   triage:
@@ -26,8 +26,9 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PYTHONPATH: backend
-      TRIAGE_LIMIT: '64'
-      TRIAGE_WORKERS: '6'
+      TRIAGE_LIMIT: '96'
+      TRIAGE_WORKERS: '1'
+      TRIAGE_BATCH_SIZE: '8'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

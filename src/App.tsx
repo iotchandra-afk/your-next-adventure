@@ -37,6 +37,18 @@ type RecallProbe = {
   classification_reason: string
   checked_at: string
 }
+type PipelineHealth = {
+  awaiting_triage: number
+  oldest_awaiting_triage: string | null
+  awaiting_qualification: number
+  oldest_awaiting_qualification: string | null
+  stale_running: number
+  recent_throttles: number
+  last_discovery_success: string | null
+  last_triage_success: string | null
+  last_qualification_success: string | null
+  degraded: boolean
+}
 type Opportunity = {
   id: string
   company_id: string | null
@@ -90,7 +102,7 @@ type IngestionRun = {
 type SourceRecord = {
   id: string
   external_id: string
-  canonical_url: string
+  canonical_url: string | null
   state: string
   first_seen_at: string
   last_seen_at: string
@@ -218,6 +230,7 @@ const emptySummary: Summary = {
   needs_data: 0,
 }
 const emptyCoverage: Coverage = { direct_sources: 0, direct_companies: 0, market_channels: 0, market_signals: 0, market_companies: 0, linked_opportunities: 0, probe_total: 0, unresolved_probes: 0, last_market_success: null }
+const emptyPipeline: PipelineHealth = { awaiting_triage: 0, oldest_awaiting_triage: null, awaiting_qualification: 0, oldest_awaiting_qualification: null, stale_running: 0, recent_throttles: 0, last_discovery_success: null, last_triage_success: null, last_qualification_success: null, degraded: false }
 
 const intelligenceSelect = 'id,company_id,opportunity_id,capability,capability_version,status,payload,evidence,confidence,policy_version,model_id,reasoning_effort,trace_id,supersedes_id,created_at,updated_at'
 const opportunitySelect = 'id,company_id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name),opportunity_sources(is_primary,source_record:source_records(canonical_url))'
@@ -231,6 +244,7 @@ function App() {
   const [summary, setSummary] = useState<Summary>(emptySummary)
   const [coverage, setCoverage] = useState<Coverage>(emptyCoverage)
   const [recallProbes, setRecallProbes] = useState<RecallProbe[]>([])
+  const [pipeline, setPipeline] = useState<PipelineHealth>(emptyPipeline)
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [sources, setSources] = useState<Source[]>([])
   const [companyIntelligence, setCompanyIntelligence] = useState<IntelligenceRecord[]>([])
@@ -266,7 +280,9 @@ function App() {
   async function refresh() {
     setLoading(true)
     setLoadError('')
-    const [summaryResult, oppResult, sourceResult, activityResult, grayResult, companyIntelResult, recallResult] = await Promise.all([
+    const staleBefore = new Date(Date.now() - 35 * 60 * 1000).toISOString()
+    const dayBefore = lastDay()
+    const [summaryResult, oppResult, sourceResult, activityResult, grayResult, companyIntelResult, recallResult, triageCountResult, triageOldestResult, qualificationCountResult, qualificationOldestResult, staleResult, throttleResult, capacityResult, triageSuccessResult, qualificationSuccessResult] = await Promise.all([
       supabase.rpc('intake_summary', { hours_back: 24 }),
       supabase.from('opportunities')
         .select(opportunitySelect)
@@ -294,9 +310,18 @@ function App() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase.from('opportunities').select('id', { count: 'exact', head: true }).eq('lifecycle_state', 'ACTIVE').eq('screening_stage', 'ELIGIBLE'),
+      supabase.from('opportunities').select('first_seen_at').eq('lifecycle_state', 'ACTIVE').eq('screening_stage', 'ELIGIBLE').order('first_seen_at', { ascending: true }).limit(1).maybeSingle(),
+      supabase.from('opportunities').select('id', { count: 'exact', head: true }).eq('lifecycle_state', 'ACTIVE').eq('screening_stage', 'TRIAGE_RELEVANT'),
+      supabase.from('opportunities').select('first_seen_at').eq('lifecycle_state', 'ACTIVE').eq('screening_stage', 'TRIAGE_RELEVANT').order('first_seen_at', { ascending: true }).limit(1).maybeSingle(),
+      supabase.from('model_runs').select('id', { count: 'exact', head: true }).eq('status', 'RUNNING').lt('started_at', staleBefore),
+      supabase.from('model_runs').select('id', { count: 'exact', head: true }).gte('started_at', dayBefore).ilike('error_text', '%429%'),
+      supabase.from('model_capacity').select('model_id,recent_throttles,last_throttle_at,blocked_until,last_success_at'),
+      supabase.from('model_runs').select('finished_at').eq('capability', 'RELEVANCE_TRIAGE').eq('status', 'PASSED').order('finished_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('model_runs').select('finished_at').eq('capability', 'DEEP_QUALIFICATION').eq('status', 'PASSED').order('finished_at', { ascending: false }).limit(1).maybeSingle(),
     ])
 
-    const firstError = [summaryResult.error, oppResult.error, sourceResult.error, activityResult.error, grayResult.error, companyIntelResult.error, recallResult.error].find(Boolean)
+    const firstError = [summaryResult.error, oppResult.error, sourceResult.error, activityResult.error, grayResult.error, companyIntelResult.error, recallResult.error, triageCountResult.error, triageOldestResult.error, qualificationCountResult.error, qualificationOldestResult.error, staleResult.error, throttleResult.error, capacityResult.error, triageSuccessResult.error, qualificationSuccessResult.error].find(Boolean)
     if (firstError) setLoadError(firstError.message)
     if (summaryResult.data?.[0]) setSummary(summaryResult.data[0] as Summary)
     setOpportunities((oppResult.data ?? []) as unknown as Opportunity[])
@@ -331,6 +356,19 @@ function App() {
     }
     setCoverage({ direct_sources: direct.length, direct_companies: new Set(direct.map((source) => source.metadata?.company_name).filter(Boolean)).size, market_channels: market.length, market_signals: marketSignals, market_companies: marketCompanies, linked_opportunities: linkedOpportunities, probe_total: probes.length, unresolved_probes: probes.filter((probe) => probe.classification.startsWith('MISSED_') || probe.classification.includes('FAILURE') || probe.classification.startsWith('UNKNOWN')).length, last_market_success: market[0]?.last_success_at ?? null })
     setRecallProbes(probes)
+    const awaitingTriage = triageCountResult.count ?? 0
+    const awaitingQualification = qualificationCountResult.count ?? 0
+    const staleRunning = staleResult.count ?? 0
+    const capacityRows = capacityResult.data ?? []
+    const recentCapacityRows = capacityRows.filter((row) => row.last_throttle_at && new Date(row.last_throttle_at).getTime() >= new Date(dayBefore).getTime())
+    const durableThrottles = recentCapacityRows.reduce((sum, row) => sum + (row.recent_throttles ?? 0), 0)
+    const recentThrottles = capacityRows.length ? durableThrottles : (throttleResult.count ?? 0)
+    const unresolvedThrottle = capacityRows.length ? recentCapacityRows.some((row) => !row.last_success_at || new Date(row.last_throttle_at).getTime() > new Date(row.last_success_at).getTime() || (row.blocked_until && new Date(row.blocked_until).getTime() > Date.now())) : recentThrottles > 0
+    const oldestTriage = triageOldestResult.data?.first_seen_at ?? null
+    const oldestQualification = qualificationOldestResult.data?.first_seen_at ?? null
+    const triageTooOld = Boolean(oldestTriage && Date.now() - new Date(oldestTriage).getTime() > 6 * 60 * 60 * 1000)
+    const qualificationTooOld = Boolean(oldestQualification && Date.now() - new Date(oldestQualification).getTime() > 4 * 60 * 60 * 1000)
+    setPipeline({ awaiting_triage: awaitingTriage, oldest_awaiting_triage: oldestTriage, awaiting_qualification: awaitingQualification, oldest_awaiting_qualification: oldestQualification, stale_running: staleRunning, recent_throttles: recentThrottles, last_discovery_success: market[0]?.last_success_at ?? null, last_triage_success: triageSuccessResult.data?.finished_at ?? null, last_qualification_success: qualificationSuccessResult.data?.finished_at ?? null, degraded: staleRunning > 0 || unresolvedThrottle || triageTooOld || qualificationTooOld })
     setGrayZoneCount(grayResult.count ?? 0)
     setLoading(false)
   }
@@ -418,7 +456,7 @@ function App() {
         }
       } else {
         let query = supabase.from('opportunities').select(opportunitySelect).order('first_seen_at', { ascending: false }).limit(100)
-        if (kind !== 'gray') query = query.gte('first_seen_at', lastDay())
+        if (!['gray', 'awaiting_triage', 'awaiting_qualification'].includes(kind)) query = query.gte('first_seen_at', lastDay())
         if (kind === 'canonical') query = query
         if (kind === 'eligible') query = query.in('screening_stage', ['ELIGIBLE', 'TRIAGE_CLEAR_NO', 'TRIAGE_POSSIBLE', 'TRIAGE_RELEVANT', 'DEEP_QUALIFY', 'PRIORITIZED'])
         if (kind === 'relevant') query = query.eq('visibility', 'SURFACED')
@@ -430,6 +468,8 @@ function App() {
         if (kind === 'clear_no') query = query.eq('screening_stage', 'TRIAGE_CLEAR_NO')
         if (kind === 'possible') query = query.eq('screening_stage', 'TRIAGE_POSSIBLE')
         if (kind === 'needs_data') query = query.eq('priority_class', 'NEEDS_DATA')
+        if (kind === 'awaiting_triage') query = query.eq('screening_stage', 'ELIGIBLE')
+        if (kind === 'awaiting_qualification') query = query.eq('screening_stage', 'TRIAGE_RELEVANT')
         const result = await query
         if (result.error) throw result.error
         rows = (result.data ?? []) as unknown as Opportunity[]
@@ -536,7 +576,7 @@ function App() {
   }
 
   const actionRequired = activity.filter((event) => event.severity === 'ACTION_REQUIRED').length
-  const runtimeHealthy = !loadError && sources.length > 0 && sources.every((source) => source.health === 'HEALTHY')
+  const runtimeHealthy = !loadError && !pipeline.degraded && sources.length > 0 && sources.every((source) => source.health === 'HEALTHY')
   const overlayBusy = detailLoading || Boolean(drilldownLoading) || Boolean(drilldownError) || Boolean(detailError)
 
   return (
@@ -563,8 +603,8 @@ function App() {
         <main className="content">
           {loading && <p className="muted" aria-live="polite">Loading current state...</p>}
           {loadError && <div className="error-banner" role="alert">Live data error: {loadError}</div>}
-          {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} onDrill={openOpportunitySet} onNeedsMe={() => setActivitySet(activity.filter((event) => event.severity === 'ACTION_REQUIRED'))} />}
-          {!loading && page === 'Intake' && <Intake summary={summary} coverage={coverage} recallProbes={recallProbes} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} onDrill={openOpportunitySet} onSource={openSource} />}
+          {!loading && page === 'Home' && <Home summary={summary} pipeline={pipeline} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} onDrill={openOpportunitySet} onNeedsMe={() => setActivitySet(activity.filter((event) => event.severity === 'ACTION_REQUIRED'))} />}
+          {!loading && page === 'Intake' && <Intake summary={summary} pipeline={pipeline} coverage={coverage} recallProbes={recallProbes} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} onDrill={openOpportunitySet} onSource={openSource} />}
           {!loading && page === 'Opportunities' && <OpportunityList opportunities={opportunities} onOpen={openOpportunity} />}
           {!loading && page === 'Companies' && <CompanyList companies={companies} onOpen={openOpportunity} onCompany={openCompany} />}
         </main>
@@ -584,17 +624,18 @@ function App() {
   )
 }
 
-function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen, onDrill, onNeedsMe }: { summary: Summary; opportunities: Opportunity[]; grayZoneCount: number; actionRequired: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onNeedsMe: () => void }) {
+function Home({ summary, pipeline, opportunities, grayZoneCount, actionRequired, onOpen, onDrill, onNeedsMe }: { summary: Summary; pipeline: PipelineHealth; opportunities: Opportunity[]; grayZoneCount: number; actionRequired: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onNeedsMe: () => void }) {
   return (
     <>
       <section className="hero-row">
         <div>
           <div className="eyebrow">WHAT MATTERS NOW</div>
-          <button className="conclusion-link" onClick={() => void onDrill('relevant', 'Relevant opportunities', 'Roles surfaced by mandate-aware relevance screening in the last 24 hours.')}><span>{summary.relevant} relevant opportunities surfaced in the last 24 hours</span><small>Inspect underlying roles →</small></button>
+          <button className="conclusion-link" onClick={() => void onDrill('relevant', 'Surfaced opportunities', 'Roles first seen in the last 24 hours whose persisted visibility is SURFACED.')}><span>{summary.relevant} surfaced from roles first seen in the last 24 hours</span><small>Inspect underlying roles →</small></button>
           <p className="muted">Broad discovery stays below the glass. Only roles that clear mandate-aware relevance screening enter this view.</p>
         </div>
         <button className="needs-me interactive-card" onClick={onNeedsMe}><strong>{actionRequired}</strong><span>Needs me · inspect →</span></button>
       </section>
+      <PipelineStatus pipeline={pipeline} onDrill={onDrill} />
       <div className="metric-grid">
         <Metric label="Tier 1" value={summary.tier_1} onClick={() => void onDrill('tier_1', 'Tier 1 opportunities', 'Highest-priority surfaced roles first seen in the last 24 hours.')} />
         <Metric label="Tier 2" value={summary.tier_2} onClick={() => void onDrill('tier_2', 'Tier 2 opportunities', 'Worth-pursuing surfaced roles first seen in the last 24 hours.')} />
@@ -602,20 +643,20 @@ function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen, o
         <Metric label="Gray zone · system-held" value={grayZoneCount} onClick={() => void onDrill('gray', 'Gray-zone audit set', 'Ambiguous roles retained for system follow-up rather than hidden as clear-no decisions.')} />
       </div>
       <section className="panel">
-        <div className="panel-title"><h3>Priority opportunities</h3><span>{opportunities.length} visible</span></div>
+        <div className="panel-title"><h3>Surfaced opportunities</h3><span>{opportunities.length} visible</span></div>
         <OpportunityRows opportunities={opportunities.slice(0, 8)} onOpen={onOpen} />
       </section>
     </>
   )
 }
 
-function Intake({ summary, coverage, recallProbes, sources, opportunities, grayZoneCount, onOpen, onDrill, onSource }: { summary: Summary; coverage: Coverage; recallProbes: RecallProbe[]; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onSource: (source: Source) => void }) {
+function Intake({ summary, pipeline, coverage, recallProbes, sources, opportunities, grayZoneCount, onOpen, onDrill, onSource }: { summary: Summary; pipeline: PipelineHealth; coverage: Coverage; recallProbes: RecallProbe[]; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onSource: (source: Source) => void }) {
   const funnel = [
     ['discovered', 'Signals discovered', summary.discovered],
-    ['canonical', 'Canonical roles', summary.canonical],
-    ['eligible', 'Executive eligible', summary.executive_eligible],
-    ['relevant', 'Relevant', summary.relevant],
-    ['priority', 'Priority', summary.tier_1 + summary.tier_2],
+    ['canonical', 'Canonicalized roles', summary.canonical],
+    ['awaiting_triage', 'Awaiting mandate triage', pipeline.awaiting_triage],
+    ['relevant', 'Surfaced · new ≤24h', summary.relevant],
+    ['priority', 'Tier 1/2 · new ≤24h', summary.tier_1 + summary.tier_2],
   ] as const
   return (
     <>
@@ -623,8 +664,9 @@ function Intake({ summary, coverage, recallProbes, sources, opportunities, grayZ
       <h2>Broad discovery. Narrow human attention.</h2>
       <p className="muted">The raw universe remains auditable but hidden by default. Hard rejects require high confidence. Ambiguous roles stay in the gray zone for system follow-up instead of disappearing.</p>
       <section className="panel funnel">
-        {funnel.map(([kind, label, value], index) => <div className="funnel-step" key={label}><button onClick={() => void onDrill(kind, label, `Underlying canonical roles for the ${label.toLowerCase()} stage in the last 24 hours.`)}><span>{label}</span><strong>{value}</strong><small>Inspect →</small></button>{index < funnel.length - 1 && <i>→</i>}</div>)}
+        {funnel.map(([kind, label, value], index) => <div className="funnel-step" key={label}><button onClick={() => void onDrill(kind, label, `Exact persisted-state records backing ${label.toLowerCase()}; labels marked ≤24h filter on first-seen time.`)}><span>{label}</span><strong>{value}</strong><small>Inspect →</small></button>{index < funnel.length - 1 && <i>→</i>}</div>)}
       </section>
+      <PipelineStatus pipeline={pipeline} onDrill={onDrill} />
       <section className="panel coverage-panel">
         <div className="panel-title"><h3>Market coverage</h3><span>{coverage.last_market_success ? `last scan ${relativeTime(coverage.last_market_success)}` : 'awaiting first market scan'}</span></div>
         <p className="muted">Coverage measures where we look; health measures whether a configured connector ran. These are intentionally separate.</p>
@@ -649,7 +691,7 @@ function Intake({ summary, coverage, recallProbes, sources, opportunities, grayZ
           <div className="panel-title"><h3>Source health</h3><span>{sources.length} enabled</span></div>
           {sources.length === 0 ? <p className="muted">No source state available.</p> : sources.map((source) => (
             <button className="source-row interactive-row" key={source.id} onClick={() => void onSource(source)}>
-              <div><strong>{source.display_name}</strong><small>{source.source_family} · {source.last_success_at ? `healthy ${relativeTime(source.last_success_at)}` : 'awaiting first success'}</small>{source.last_error && <small className="source-error">{source.last_error}</small>}</div>
+              <div><strong>{source.display_name}</strong><small>{source.source_family} · {source.health === 'HEALTHY' && source.last_success_at ? `healthy ${relativeTime(source.last_success_at)}` : source.last_success_at ? `last success ${relativeTime(source.last_success_at)}` : 'awaiting first success'}</small>{source.last_error && <small className="source-error">{source.last_error}</small>}</div>
               <div className="role-actions"><span className={`health ${source.health.toLowerCase()}`}>{source.health}</span><span className="inspect">Inspect source →</span></div>
             </button>
           ))}
@@ -689,8 +731,34 @@ function CompanyList({ companies, onOpen, onCompany }: { companies: CompanyView[
   })}</div></>
 }
 
+function PipelineStatus({ pipeline, onDrill }: { pipeline: PipelineHealth; onDrill: (kind: string, title: string, description: string) => void }) {
+  const status = pipeline.degraded ? 'DEGRADED · PROCESSING INCOMPLETE' : 'PROCESSING CURRENT'
+  return <section className={`panel pipeline-status ${pipeline.degraded ? 'degraded' : ''}`}>
+    <div className="panel-title"><h3>Pipeline assurance</h3><span>{status}</span></div>
+    <p className="muted">Recommendation totals cover processed records only. Backlog is shown separately and never interpreted as a negative recommendation.</p>
+    <div className="pipeline-grid">
+      <button className="interactive-card" onClick={() => void onDrill('awaiting_triage', 'Awaiting mandate triage', 'Active canonical roles whose persisted screening_stage is ELIGIBLE; no relevance outcome exists yet.')}><strong>{pipeline.awaiting_triage}</strong><span>Awaiting triage</span><small>{pipeline.oldest_awaiting_triage ? `oldest ${relativeTime(pipeline.oldest_awaiting_triage)}` : 'none pending'} · Inspect →</small></button>
+      <button className="interactive-card" onClick={() => void onDrill('awaiting_qualification', 'Awaiting deep qualification', 'Active roles whose persisted screening_stage is TRIAGE_RELEVANT; no priority outcome exists yet.')}><strong>{pipeline.awaiting_qualification}</strong><span>Awaiting qualification</span><small>{pipeline.oldest_awaiting_qualification ? `oldest ${relativeTime(pipeline.oldest_awaiting_qualification)}` : 'none pending'} · Inspect →</small></button>
+      <div><strong>{pipeline.stale_running}</strong><span>Stale running work</span><small>worker timeout + 5m</small></div>
+      <div><strong>{pipeline.recent_throttles}</strong><span>Provider throttles</span><small>last 24h</small></div>
+    </div>
+    <div className="freshness-line"><span>Discovery {timeOrNever(pipeline.last_discovery_success)}</span><span>Triage {timeOrNever(pipeline.last_triage_success)}</span><span>Qualification {timeOrNever(pipeline.last_qualification_success)}</span></div>
+  </section>
+}
+
+function opportunityState(role: Opportunity): { label: string; className: string } {
+  if (role.priority_class) return { label: role.priority_class.replaceAll('_', ' '), className: role.priority_class.toLowerCase() }
+  if (role.screening_stage === 'ELIGIBLE') return { label: 'AWAITING TRIAGE', className: 'pending' }
+  if (role.screening_stage === 'TRIAGE_RELEVANT') return { label: 'AWAITING QUALIFICATION', className: 'pending' }
+  if (role.screening_stage === 'TRIAGE_POSSIBLE') return { label: 'AMBIGUOUS · HELD', className: 'pending' }
+  if (role.screening_stage === 'TRIAGE_CLEAR_NO') return { label: 'CLEAR NO', className: 'reject' }
+  return { label: 'UNPROCESSED', className: 'pending' }
+}
+
+function timeOrNever(value: string | null) { return value ? relativeTime(value) : 'no recorded success' }
+
 function OpportunityRows({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (role: Opportunity) => void }) {
-  if (opportunities.length === 0) return <p className="muted">No roles have cleared the relevance gate yet.</p>
+  if (opportunities.length === 0) return <p className="muted">No roles match this exact persisted-state query.</p>
   return <div>{opportunities.map((role) => (
     <div className="opportunity-row" key={role.id}>
       <button className="opportunity-main" onClick={() => onOpen(role)}>
@@ -698,7 +766,7 @@ function OpportunityRows({ opportunities, onOpen }: { opportunities: Opportunity
         <div className="role-meta">{role.company?.display_name ?? 'Company pending'}{role.location ? ` · ${role.location}` : ''}</div>
         {role.current_reason_text && <div className="reason">{role.current_reason_text}</div>}
       </button>
-      <div className="role-actions"><span className={`priority ${(role.priority_class ?? 'needs_data').toLowerCase()}`}>{(role.priority_class ?? 'NEEDS_DATA').replace('_', ' ')}</span>{postingUrl(role) ? <a className="posting-link" href={postingUrl(role)} target="_blank" rel="noreferrer">Open posting ↗</a> : <span className="source-unavailable">Source URL unavailable</span>}<button className="inspect-link" onClick={() => onOpen(role)}>Decision glass →</button></div>
+      <div className="role-actions"><span className={`priority ${opportunityState(role).className}`}>{opportunityState(role).label}</span>{postingUrl(role) ? <a className="posting-link" href={postingUrl(role)} target="_blank" rel="noreferrer">Open posting ↗</a> : <span className="source-unavailable">Source URL unavailable</span>}<button className="inspect-link" onClick={() => onOpen(role)}>Decision glass →</button></div>
     </div>
   ))}</div>
 }
@@ -739,7 +807,7 @@ function SourceDrawer({ detail, onOpen, onClose }: { detail: SourceDetail; onOpe
     </div>
     {source.last_error && <div className="error-banner" role="alert">Latest source error: {source.last_error}</div>}
     <DetailBlock title="Recent ingestion runs">{runs.length ? <div className="run-list">{runs.map((run) => <div className="run-row" key={run.id}><div><strong>{run.status}</strong><small>{formatDate(run.started_at)}{run.finished_at ? ` → ${formatDate(run.finished_at)}` : ' · still running'}</small></div><div className="run-counts"><span>{run.discovered_count} discovered</span><span>{run.new_count} new</span><span>{run.changed_count} changed</span><span>{run.duplicate_count} duplicate</span><span>{run.closed_count} closed</span><span>{run.error_count} errors</span></div>{run.error_text && <p className="source-error">{run.error_text}</p>}</div>)}</div> : <p className="muted">No ingestion runs recorded.</p>}</DetailBlock>
-    <DetailBlock title="Recent source records">{records.length ? <div>{records.map((record) => <div className="evidence-row" key={record.id}><div><strong>{record.external_id}</strong><small>{record.state} · seen {relativeTime(record.last_seen_at)}</small></div><a href={record.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a></div>)}</div> : <p className="muted">No source records available.</p>}</DetailBlock>
+    <DetailBlock title="Recent source records">{records.length ? <div>{records.map((record) => <div className="evidence-row" key={record.id}><div><strong>{record.external_id}</strong><small>{record.state} · seen {relativeTime(record.last_seen_at)}</small></div>{record.canonical_url ? <a href={record.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a> : <span className="source-unavailable">Source URL unavailable</span>}</div>)}</div> : <p className="muted">No source records available.</p>}</DetailBlock>
     <DetailBlock title="Linked canonical roles"><OpportunityRows opportunities={opportunities} onOpen={onOpen} /></DetailBlock>
   </DrawerShell>
 }
