@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from yna import triage_parallel
 from yna.runtime_capacity import CapacityUnavailable, RuntimeCapacity
 from yna.triage_parallel import validate_batch_decisions
 
@@ -92,3 +93,36 @@ def test_capacity_migration_is_caller_scoped_and_recovers_stale_runs():
     assert "stale_running_recovered" in sql
     assert "from public, anon, authenticated" in sql
     assert "grant execute" in sql and "to service_role" in sql
+
+
+def test_triage_stops_claiming_backlog_after_first_failed_batch(monkeypatch):
+    class EventDB:
+        def __init__(self, *_args):
+            self.events = []
+
+        def insert(self, table, payload):
+            assert table == "activity_events"
+            self.events.append(payload)
+            return [payload]
+
+    db = EventDB()
+    calls = []
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr(triage_parallel, "SupabaseREST", lambda *_args: db)
+    monkeypatch.setattr(triage_parallel, "OpenAIResponses", lambda: object())
+    monkeypatch.setattr(triage_parallel, "_private_context", lambda _db: ({}, {}, "candidate-v1", "policy-v1"))
+    monkeypatch.setattr(triage_parallel, "_eligible_roles", lambda _db, _limit: [{"id": str(i)} for i in range(16)])
+
+    def fail_first(_db, _ai, roles, *_args):
+        calls.append([role["id"] for role in roles])
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(triage_parallel, "triage_batch", fail_first)
+
+    assert triage_parallel.run() == 2
+    assert calls == [[str(i) for i in range(8)]]
+    assert db.events[-1]["details"]["FAILED"] == 8
+    assert db.events[-1]["details"]["evaluated"] == 0
+    assert db.events[-1]["details"]["unclaimed"] == 8
+    assert db.events[-1]["message"] == "Mandate relevance triage evaluated 0 of 8 attempted roles; 8 selected roles remained unclaimed."
