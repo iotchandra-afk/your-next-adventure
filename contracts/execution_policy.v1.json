@@ -16,7 +16,8 @@
       "REPOSITORY_NATIVE_AGENT",
       "DURABLE_AUTOMATION_WORKER"
     ],
-    "forbid_claiming_background_continuation_without_active_runner": true
+    "forbid_claiming_background_continuation_without_active_runner": true,
+    "persistent_runner_must_continue_across_internal_engineering_units": true
   },
   "stop_conditions": [
     "BLOCKED",
@@ -31,6 +32,39 @@
     "OUTBOUND_COMMUNICATION_SEND",
     "FINAL_JOB_APPLICATION_SUBMISSION"
   ],
+  "merge_deploy_policy": {
+    "production_label_alone_requires_approval": false,
+    "routine_reversible_merge_to_main_requires_approval": false,
+    "routine_reversible_deployment_requires_approval": false,
+    "github_pages_deployment_requires_approval": false,
+    "additive_non_destructive_migration_requires_approval": false,
+    "pr_ready_is_completion": false,
+    "ci_passed_is_completion": false,
+    "deployment_ready_is_completion": false,
+    "requirements_for_autonomous_merge_deploy": [
+      "WITHIN_ALREADY_AUTHORIZED_SCOPE",
+      "REQUIRED_CHECKS_PASS",
+      "NO_RESERVED_BOUNDARY_CHANGE",
+      "NORMAL_ROLLBACK_PATH_EXISTS"
+    ],
+    "on_base_branch_drift": [
+      "UPDATE_OR_REBASE_BRANCH",
+      "RESOLVE_ROUTINE_CONFLICTS",
+      "RERUN_REQUIRED_CHECKS",
+      "MERGE_WHEN_SAFE",
+      "VERIFY_DEPLOYMENT",
+      "CONTINUE"
+    ]
+  },
+  "routine_autonomous_actions": [
+    "UPDATE_OR_REBASE_IMPLEMENTATION_BRANCH",
+    "RESOLVE_ROUTINE_NON_CONSEQUENTIAL_MERGE_CONFLICTS",
+    "MERGE_IMPLEMENTATION_PR_TO_MAIN",
+    "SQUASH_MERGE_IMPLEMENTATION_PR_TO_MAIN",
+    "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN",
+    "VERIFY_ROUTINE_DEPLOYMENT",
+    "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION"
+  ],
   "forbidden_unsolicited_interruptions": [
     "PROGRESS_UPDATE",
     "PERCENT_COMPLETE",
@@ -38,6 +72,10 @@
     "SUCCESSFUL_TEST",
     "SUCCESSFUL_DEPLOYMENT",
     "SUCCESSFUL_MIGRATION",
+    "PR_READY_FOR_REVIEW",
+    "PR_READY_FOR_MERGE",
+    "ROUTINE_MERGE_APPROVAL_REQUEST",
+    "ROUTINE_DEPLOYMENT_APPROVAL_REQUEST",
     "ROUTINE_IMPLEMENTATION_CHOICE",
     "RECOVERABLE_FAILURE",
     "DEBUGGING_PROGRESS",
@@ -50,16 +88,27 @@
     "on_pass": [
       "VERIFY",
       "PERSIST_EVIDENCE",
+      "PERFORM_NEXT_SAFE_AUTHORIZED_ACTION",
       "CONTINUE_IF_EXECUTION_SURFACE_ACTIVE"
     ],
     "requires_user_acknowledgement": false,
     "emit_status_message": false
   },
+  "completion_policy": {
+    "code_written_is_done": false,
+    "pr_opened_is_done": false,
+    "pr_ready_is_done": false,
+    "ci_passed_is_done": false,
+    "deployment_ready_is_done": false,
+    "checkpoint_reached_is_done": false,
+    "done_requires_active_task_acceptance_criteria_satisfied": true
+  },
   "failure_behavior": {
     "recoverable_failure": "REMEDIATE_AND_CONTINUE",
     "consequential_unknown": "FAIL_CLOSED",
     "escalate_only_if_stop_condition": true,
-    "bundle_unresolved_questions": true
+    "bundle_unresolved_questions": true,
+    "base_branch_drift": "REPAIR_AND_CONTINUE"
   },
   "user_requested_query_behavior": {
     "answer_direct_question": true,
