@@ -1,0 +1,74 @@
+.status-dot.attention {
+  background: #bc8d32;
+}
+
+.company-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.company-card {
+  min-width: 0;
+}
+
+.company-intelligence {
+  margin-bottom: 14px;
+  padding: 13px;
+  border-radius: 10px;
+  background: #f3f6f4;
+}
+
+.company-intelligence p {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.company-opportunities > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #657a70;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.needs-me-list {
+  margin-bottom: 10px;
+  padding: 11px;
+  border: 1px solid #eadbbd;
+  border-radius: 10px;
+  background: #fff8ec;
+}
+
+.needs-me-list .activity-item {
+  margin: 0;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.needs-me-list .activity-item:first-of-type {
+  border-top: 0;
+}
+
+@media (max-width: 1120px) {
+  .company-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  nav {
+    overflow-x: auto;
+  }
+
+  .company-intelligence .intel-head {
+    display: block;
+  }
+
+  .company-intelligence .confidence {
+    margin-top: 8px;
+  }
+}
