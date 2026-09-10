@@ -23,12 +23,31 @@ Before changing anything, read and obey, in order:
 5. docs/EXECUTION_MODEL.md
 6. docs/GLASS_COCKPIT.md
 7. docs/DRILLDOWN_ACCEPTANCE.md
-8. GitHub Issue #1 go-live control board
-9. GitHub Issue #3 P0 drill-down defect
+8. docs/DISCOVERY_RECALL_ACCEPTANCE.md
+9. GitHub Issue #1 go-live control board
+10. GitHub Issue #3 P0 drill-down defect
+11. GitHub Issue #4 P0 broad-market discovery recall defect
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
 
-P0 usability requirement: the cockpit currently surfaces consequential information but incomplete drill-down remains a product defect. Implement and verify docs/DRILLDOWN_ACCEPTANCE.md before treating cockpit usability as complete.
+CURRENT P0 PRODUCT DEFECTS FROM OWNER REVIEW:
+
+P0-A — DRILL-DOWN / SOURCE ACCESS
+- the deployed cockpit still has consequential surfaces that do not drill down;
+- implement docs/DRILLDOWN_ACCEPTANCE.md completely;
+- every Intake role or source record with a persisted canonical/discovery URL must expose a one-click `Open posting ↗` / source link;
+- opportunity decision glass should also expose the canonical posting near the role identity;
+- no visible consequential card/count/row may be a dead end.
+
+P0-B — BROAD-MARKET DISCOVERY RECALL
+- the current runtime proves several ATS adapters work but polls only a limited static employer registry;
+- independently discoverable relevant executive opportunities have been missed because their companies/sources are outside that registry;
+- implement docs/DISCOVERY_RECALL_ACCEPTANCE.md and Issue #4;
+- add a durable DISCOVERY_SIGNAL ingestion path;
+- activate market discovery independent of the static employer list;
+- reconcile a bounded private set of recent live-scan opportunities against canonical intake and explain every miss;
+- source coverage and source health are different metrics;
+- do not certify CP2 broad discovery PASS until recall acceptance is satisfied.
 
 The delegated task is the full authorized go-live scope, NOT the completion of one PR, one CI run, one deployment, one checkpoint, or one engineering time slice.
 
@@ -68,11 +87,13 @@ Continue through the established go-live checkpoints and specifications until a 
 The persistent runner is considered correctly initialized only after it has:
 
 - read the normative files above;
-- inspected current `main`, open/active PRs and workflow runs, Issue #1, and Issue #3;
+- inspected current `main`, open/active PRs and workflow runs, Issue #1, Issue #3, and Issue #4;
 - inspected current Supabase runtime state before making state-dependent claims;
 - confirmed that implementation remains authorized;
 - resumed from durable state without asking the user to restate prior decisions;
 - treated `docs/DRILLDOWN_ACCEPTANCE.md` as P0 until verified;
+- treated `docs/DISCOVERY_RECALL_ACCEPTANCE.md` as P0 until verified;
+- recognized that working ATS adapters do not by themselves prove broad-market recall;
 - treated routine reversible PR merge and GitHub Pages deployment as autonomous actions, not approval boundaries;
 - recognized that PR/CI/deploy completion is not project completion;
 - avoided a routine progress response.
