@@ -248,10 +248,15 @@ ADAPTERS = {
 def seed_sources(db: SupabaseREST, catalog_path: Path) -> list[dict[str, Any]]:
     catalog = json.loads(catalog_path.read_text())
     now = utcnow()
+    owned_keys = {source["source_key"] for source in catalog}
     for source in catalog:
         payload = {**source, "enabled": True, "updated_at": now}
         db.upsert("source_registry", payload, "source_key")
-    return db.select("source_registry", {"enabled": "eq.true", "order": "display_name.asc"})
+    # The registry is shared by independent pipelines. Direct ATS intake owns only
+    # catalogued adapter sources; it must never fetch or mutate discovery-channel
+    # health simply because that source is enabled in the same canonical table.
+    rows = db.select("source_registry", {"enabled": "eq.true", "order": "display_name.asc"})
+    return [row for row in rows if row.get("source_key") in owned_keys and row.get("source_family") in ADAPTERS]
 
 
 def get_or_create_company(db: SupabaseREST, company_name: str) -> str:
