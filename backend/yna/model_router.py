@@ -35,6 +35,7 @@ class Route:
 
 
 ROUTES = {
+    "MARKET_DISCOVERY": Route("STANDARD_REASONING", "gpt-5.6-sol", "high"),
     "RELEVANCE_TRIAGE": Route("STANDARD_REASONING", "gpt-5.6-sol", "high"),
     "FALSE_NEGATIVE_AUDIT": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),
     "DEEP_QUALIFICATION": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),

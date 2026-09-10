@@ -1,0 +1,36 @@
+name: Broad market discovery
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/discovery.yml'
+permissions:
+  contents: read
+concurrency:
+  group: broad-market-discovery
+  cancel-in-progress: false
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Unit tests
+        run: pytest -q backend/tests
+      - name: Discover market and reconcile independent recall probes
+        run: python -m yna.discovery

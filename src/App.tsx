@@ -16,6 +16,27 @@ type Summary = {
   monitor: number
   needs_data: number
 }
+type Coverage = {
+  direct_sources: number
+  direct_companies: number
+  market_channels: number
+  market_signals: number
+  market_companies: number
+  linked_opportunities: number
+  probe_total: number
+  unresolved_probes: number
+  last_market_success: string | null
+}
+type RecallProbe = {
+  id?: string
+  company_name: string
+  title: string
+  discovery_url: string
+  official_url: string | null
+  classification: string
+  classification_reason: string
+  checked_at: string
+}
 type Opportunity = {
   id: string
   company_id: string | null
@@ -42,6 +63,7 @@ type Source = {
   last_sync_at: string | null
   last_success_at: string | null
   last_error: string | null
+  metadata?: { company_name?: string } | null
 }
 type Activity = {
   id: string
@@ -195,6 +217,7 @@ const emptySummary: Summary = {
   monitor: 0,
   needs_data: 0,
 }
+const emptyCoverage: Coverage = { direct_sources: 0, direct_companies: 0, market_channels: 0, market_signals: 0, market_companies: 0, linked_opportunities: 0, probe_total: 0, unresolved_probes: 0, last_market_success: null }
 
 const intelligenceSelect = 'id,company_id,opportunity_id,capability,capability_version,status,payload,evidence,confidence,policy_version,model_id,reasoning_effort,trace_id,supersedes_id,created_at,updated_at'
 const opportunitySelect = 'id,company_id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name),opportunity_sources(is_primary,source_record:source_records(canonical_url))'
@@ -206,6 +229,8 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [page, setPage] = useState<Page>('Home')
   const [summary, setSummary] = useState<Summary>(emptySummary)
+  const [coverage, setCoverage] = useState<Coverage>(emptyCoverage)
+  const [recallProbes, setRecallProbes] = useState<RecallProbe[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [sources, setSources] = useState<Source[]>([])
   const [companyIntelligence, setCompanyIntelligence] = useState<IntelligenceRecord[]>([])
@@ -241,7 +266,7 @@ function App() {
   async function refresh() {
     setLoading(true)
     setLoadError('')
-    const [summaryResult, oppResult, sourceResult, activityResult, grayResult, companyIntelResult] = await Promise.all([
+    const [summaryResult, oppResult, sourceResult, activityResult, grayResult, companyIntelResult, recallResult] = await Promise.all([
       supabase.rpc('intake_summary', { hours_back: 24 }),
       supabase.from('opportunities')
         .select(opportunitySelect)
@@ -249,7 +274,7 @@ function App() {
         .order('first_seen_at', { ascending: false })
         .limit(50),
       supabase.from('source_registry')
-        .select('id,display_name,source_family,base_url,health,last_sync_at,last_success_at,last_error')
+        .select('id,display_name,source_family,base_url,health,last_sync_at,last_success_at,last_error,metadata')
         .eq('enabled', true)
         .order('display_name'),
       supabase.from('activity_events')
@@ -263,15 +288,49 @@ function App() {
         .eq('status', 'COMPLETED')
         .order('created_at', { ascending: false })
         .limit(100),
+      supabase.from('activity_events')
+        .select('id,severity,message,created_at,entity_type,entity_id,details')
+        .eq('event_type', 'MARKET_DISCOVERY_COMPLETED')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
-    const firstError = [summaryResult.error, oppResult.error, sourceResult.error, activityResult.error, grayResult.error, companyIntelResult.error].find(Boolean)
+    const firstError = [summaryResult.error, oppResult.error, sourceResult.error, activityResult.error, grayResult.error, companyIntelResult.error, recallResult.error].find(Boolean)
     if (firstError) setLoadError(firstError.message)
     if (summaryResult.data?.[0]) setSummary(summaryResult.data[0] as Summary)
     setOpportunities((oppResult.data ?? []) as unknown as Opportunity[])
     setSources((sourceResult.data ?? []) as Source[])
     setActivity((activityResult.data ?? []) as Activity[])
     setCompanyIntelligence((companyIntelResult.data ?? []) as unknown as IntelligenceRecord[])
+    const sourceRows = (sourceResult.data ?? []) as Source[]
+    const direct = sourceRows.filter((source) => source.source_family !== 'DISCOVERY_SIGNAL')
+    const market = sourceRows.filter((source) => source.source_family === 'DISCOVERY_SIGNAL')
+    const detail = (recallResult.data?.details ?? {}) as Record<string, unknown>
+    const probes = Array.isArray(detail.recall_probes) ? detail.recall_probes as RecallProbe[] : []
+    const marketSourceIds = market.map((source) => source.id)
+    let marketSignals = 0
+    let linkedOpportunities = 0
+    let marketCompanies = 0
+    if (marketSourceIds.length) {
+      const recordsResult = await supabase.from('source_records').select('id', { count: 'exact' }).in('source_id', marketSourceIds)
+      if (recordsResult.error) setLoadError(recordsResult.error.message)
+      const recordIds = (recordsResult.data ?? []).map((record) => record.id)
+      marketSignals = recordsResult.count ?? recordIds.length
+      if (recordIds.length) {
+        const linksResult = await supabase.from('opportunity_sources').select('opportunity_id').in('source_record_id', recordIds)
+        if (linksResult.error) setLoadError(linksResult.error.message)
+        const opportunityIds = [...new Set((linksResult.data ?? []).map((link) => link.opportunity_id))]
+        linkedOpportunities = opportunityIds.length
+        if (opportunityIds.length) {
+          const companiesResult = await supabase.from('opportunities').select('company_id').in('id', opportunityIds)
+          if (companiesResult.error) setLoadError(companiesResult.error.message)
+          marketCompanies = new Set((companiesResult.data ?? []).map((role) => role.company_id).filter(Boolean)).size
+        }
+      }
+    }
+    setCoverage({ direct_sources: direct.length, direct_companies: new Set(direct.map((source) => source.metadata?.company_name).filter(Boolean)).size, market_channels: market.length, market_signals: marketSignals, market_companies: marketCompanies, linked_opportunities: linkedOpportunities, probe_total: probes.length, unresolved_probes: probes.filter((probe) => probe.classification.startsWith('MISSED_') || probe.classification.includes('FAILURE') || probe.classification.startsWith('UNKNOWN')).length, last_market_success: market[0]?.last_success_at ?? null })
+    setRecallProbes(probes)
     setGrayZoneCount(grayResult.count ?? 0)
     setLoading(false)
   }
@@ -505,7 +564,7 @@ function App() {
           {loading && <p className="muted" aria-live="polite">Loading current state...</p>}
           {loadError && <div className="error-banner" role="alert">Live data error: {loadError}</div>}
           {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} onDrill={openOpportunitySet} onNeedsMe={() => setActivitySet(activity.filter((event) => event.severity === 'ACTION_REQUIRED'))} />}
-          {!loading && page === 'Intake' && <Intake summary={summary} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} onDrill={openOpportunitySet} onSource={openSource} />}
+          {!loading && page === 'Intake' && <Intake summary={summary} coverage={coverage} recallProbes={recallProbes} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} onDrill={openOpportunitySet} onSource={openSource} />}
           {!loading && page === 'Opportunities' && <OpportunityList opportunities={opportunities} onOpen={openOpportunity} />}
           {!loading && page === 'Companies' && <CompanyList companies={companies} onOpen={openOpportunity} onCompany={openCompany} />}
         </main>
@@ -550,7 +609,7 @@ function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen, o
   )
 }
 
-function Intake({ summary, sources, opportunities, grayZoneCount, onOpen, onDrill, onSource }: { summary: Summary; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onSource: (source: Source) => void }) {
+function Intake({ summary, coverage, recallProbes, sources, opportunities, grayZoneCount, onOpen, onDrill, onSource }: { summary: Summary; coverage: Coverage; recallProbes: RecallProbe[]; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onSource: (source: Source) => void }) {
   const funnel = [
     ['discovered', 'Signals discovered', summary.discovered],
     ['canonical', 'Canonical roles', summary.canonical],
@@ -565,6 +624,25 @@ function Intake({ summary, sources, opportunities, grayZoneCount, onOpen, onDril
       <p className="muted">The raw universe remains auditable but hidden by default. Hard rejects require high confidence. Ambiguous roles stay in the gray zone for system follow-up instead of disappearing.</p>
       <section className="panel funnel">
         {funnel.map(([kind, label, value], index) => <div className="funnel-step" key={label}><button onClick={() => void onDrill(kind, label, `Underlying canonical roles for the ${label.toLowerCase()} stage in the last 24 hours.`)}><span>{label}</span><strong>{value}</strong><small>Inspect →</small></button>{index < funnel.length - 1 && <i>→</i>}</div>)}
+      </section>
+      <section className="panel coverage-panel">
+        <div className="panel-title"><h3>Market coverage</h3><span>{coverage.last_market_success ? `last scan ${relativeTime(coverage.last_market_success)}` : 'awaiting first market scan'}</span></div>
+        <p className="muted">Coverage measures where we look; health measures whether a configured connector ran. These are intentionally separate.</p>
+        <div className="coverage-grid" aria-label="Discovery coverage measures">
+          <div><span>Direct sources</span><strong>{coverage.direct_sources}</strong><small>{coverage.direct_companies} named employers</small></div>
+          <div><span>Market channels</span><strong>{coverage.market_channels}</strong><small>{coverage.market_companies} companies beyond the registry</small></div>
+          <div><span>Market signals</span><strong>{coverage.market_signals}</strong><small>{coverage.linked_opportunities} canonical links</small></div>
+          <div><span>Recall probes</span><strong>{coverage.probe_total}</strong><small>{coverage.unresolved_probes} unresolved misses</small></div>
+        </div>
+        <div className="probe-list">
+          <div className="panel-title"><h4>Independent recall probes</h4><span>private runtime evidence</span></div>
+          {recallProbes.length === 0 ? <p className="muted">No independent live-scan probes have been reconciled yet.</p> : recallProbes.map((probe) => (
+            <div className="probe-row" key={probe.id ?? probe.discovery_url}>
+              <div><strong>{probe.title}</strong><small>{probe.company_name} · {probe.classification.replaceAll('_', ' ')}</small><p>{probe.classification_reason}</p></div>
+              <a className="posting-link" href={probe.official_url ?? probe.discovery_url} target="_blank" rel="noreferrer">Open probe source ↗</a>
+            </div>
+          ))}
+        </div>
       </section>
       <div className="split-grid">
         <section className="panel">

@@ -42,3 +42,10 @@ test('drill-down surfaces preserve keyboard close and explicit failure feedback'
   assert.match(app, /Source URL unavailable/)
   assert.match(app, /opportunity_sources\(is_primary,source_record:source_records\(canonical_url\)\)/)
 })
+
+test('intake distinguishes market coverage from source health and exposes probe sources', () => {
+  assert.match(app, /<h3>Market coverage<\/h3>/)
+  assert.match(app, /Coverage measures where we look; health measures whether a configured connector ran/)
+  assert.match(app, /Independent recall probes/)
+  assert.match(app, /Open probe source ↗/)
+})
