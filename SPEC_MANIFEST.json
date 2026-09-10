@@ -6,15 +6,19 @@
   "canonical_spec": "SPEC.md",
   "execution_contract": "AGENTS.md",
   "machine_execution_policy": "contracts/execution_policy.v1.json",
+  "product_invariants": "contracts/product_invariants.v1.json",
   "execution_architecture": "docs/EXECUTION_MODEL.md",
   "persistent_execution_handoff": "docs/WORK_HANDOFF.md",
   "iteration_contract": "docs/ITERATION_CONTRACT.md",
+  "delivery_assurance_contract": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
   "human_entrypoint": "README.md",
   "normative_sources": [
     "SPEC.md",
     "AGENTS.md",
     "contracts/execution_policy.v1.json",
-    "docs/ITERATION_CONTRACT.md"
+    "contracts/product_invariants.v1.json",
+    "docs/ITERATION_CONTRACT.md",
+    "docs/DELIVERY_ASSURANCE_CONTRACT.md"
   ],
   "acceptance_contracts": {
     "drilldown": {
@@ -32,13 +36,24 @@
       "priority": "NORMATIVE",
       "required_for_persistent_build_runs": true,
       "reiterate_after_material_slice": true
+    },
+    "delivery_assurance": {
+      "path": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
+      "priority": "NORMATIVE",
+      "product_invariants": "contracts/product_invariants.v1.json",
+      "required_for_material_changes": true,
+      "requires_positive_and_negative_assertions": true,
+      "requires_runtime_reconciliation_when_applicable": true,
+      "requires_deployed_verification_for_user_visible_changes": true
     }
   },
   "authority_split": {
     "product_requirements": "SPEC.md",
     "autonomous_agent_behavior": "AGENTS.md",
     "machine_enforcement_contract": "contracts/execution_policy.v1.json",
-    "iteration_and_red_team_behavior": "docs/ITERATION_CONTRACT.md"
+    "product_cross_layer_invariants": "contracts/product_invariants.v1.json",
+    "iteration_and_red_team_behavior": "docs/ITERATION_CONTRACT.md",
+    "release_and_delivery_assurance": "docs/DELIVERY_ASSURANCE_CONTRACT.md"
   },
   "execution_surface_policy": {
     "github_role": "CONTROL_PLANE_AND_SYSTEM_OF_RECORD",
@@ -47,7 +62,8 @@
     "repository_instructions_create_persistence": false,
     "preferred_persistent_surface": "CHATGPT_WORK",
     "persistent_runner_must_continue_across_internal_engineering_units": true,
-    "persistent_runner_must_reiterate_across_material_slices": true
+    "persistent_runner_must_reiterate_across_material_slices": true,
+    "persistent_runner_must_verify_affected_product_invariants": true
   },
   "control_plane_write_policy": {
     "github_repository_native_writes_require_outbound_communication_approval": false,
@@ -72,7 +88,9 @@
     "pr_ready_is_done": false,
     "ci_passed_is_done": false,
     "deployment_ready_is_done": false,
-    "p0_fixed_is_done": false
+    "p0_fixed_is_done": false,
+    "affected_product_invariants_must_pass_before_slice_completion": true,
+    "post_deploy_runtime_reconciliation_required_when_applicable": true
   },
   "default_execution_action": "CONTINUE",
   "internal_post_slice_action": "REITERATE",
@@ -80,7 +98,7 @@
   "allowed_unsolicited_stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN_ACTION_REQUIRED",
+    "HUMAN ACTION REQUIRED",
     "DONE"
   ],
   "checkpoint_requires_user_acknowledgement": false,
