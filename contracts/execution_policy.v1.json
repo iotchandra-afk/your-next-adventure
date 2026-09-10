@@ -56,6 +56,30 @@
       "CONTINUE"
     ]
   },
+  "iteration_policy": {
+    "contract": "docs/ITERATION_CONTRACT.md",
+    "enabled_for_persistent_runs": true,
+    "after_material_slice": "REITERATE",
+    "reiterate_is_user_facing_message": false,
+    "scope_for_next_iteration": "ENTIRE_AUTHORIZED_PRODUCT_SCOPE",
+    "prior_passes_are_falsifiable": true,
+    "reopen_checkpoint_when_new_evidence_invalidates_pass": true,
+    "whole_system_red_team_required": true,
+    "real_data_verification_required_when_feasible": true,
+    "deployed_behavior_required_for_user_visible_acceptance": true,
+    "forbid_weakening_requirements_to_reach_done": true,
+    "forbid_proxy_metric_substitution_for_required_outcome": true,
+    "forbid_local_optimization_at_product_objective_expense": true,
+    "priority_order": [
+      "MISSED_HIGH_VALUE_OPPORTUNITIES",
+      "MATERIALLY_WRONG_DECISIONS",
+      "USER_VALIDATION_OR_ACTION_DEAD_ENDS",
+      "TRUTH_PROVENANCE_SECURITY_FAILURES",
+      "RELIABILITY_RECOVERY_COST_FAILURES",
+      "DECISION_VELOCITY_USABILITY",
+      "COSMETIC_REFINEMENT"
+    ]
+  },
   "routine_autonomous_actions": [
     "UPDATE_OR_REBASE_IMPLEMENTATION_BRANCH",
     "RESOLVE_ROUTINE_NON_CONSEQUENTIAL_MERGE_CONFLICTS",
@@ -63,7 +87,10 @@
     "SQUASH_MERGE_IMPLEMENTATION_PR_TO_MAIN",
     "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN",
     "VERIFY_ROUTINE_DEPLOYMENT",
-    "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION"
+    "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION",
+    "WHOLE_SYSTEM_RED_TEAM",
+    "REOPEN_INVALIDATED_CHECKPOINT",
+    "REITERATE_TO_NEXT_HIGHEST_VALUE_REQUIREMENT"
   ],
   "forbidden_unsolicited_interruptions": [
     "PROGRESS_UPDATE",
@@ -81,6 +108,7 @@
     "DEBUGGING_PROGRESS",
     "SOURCE_SYNC_STATUS",
     "MODEL_RUN_STATUS",
+    "REITERATION_STATUS",
     "REQUEST_TO_PROCEED",
     "REQUEST_TO_RECONFIRM_EXISTING_AUTHORITY"
   ],
@@ -89,6 +117,8 @@
       "VERIFY",
       "PERSIST_EVIDENCE",
       "PERFORM_NEXT_SAFE_AUTHORIZED_ACTION",
+      "WHOLE_SYSTEM_RED_TEAM",
+      "REITERATE_IF_SCOPE_REMAINS",
       "CONTINUE_IF_EXECUTION_SURFACE_ACTIVE"
     ],
     "requires_user_acknowledgement": false,
@@ -101,7 +131,10 @@
     "ci_passed_is_done": false,
     "deployment_ready_is_done": false,
     "checkpoint_reached_is_done": false,
-    "done_requires_active_task_acceptance_criteria_satisfied": true
+    "p0_fixed_is_done": false,
+    "done_requires_active_task_acceptance_criteria_satisfied": true,
+    "done_requires_no_known_contradictory_evidence": true,
+    "done_requires_latest_whole_system_red_team_clear_of_material_go_live_blockers": true
   },
   "failure_behavior": {
     "recoverable_failure": "REMEDIATE_AND_CONTINUE",
@@ -125,6 +158,7 @@
     "product_contract": "SPEC.md",
     "agent_contract": "AGENTS.md",
     "manifest": "SPEC_MANIFEST.json",
+    "iteration_contract": "docs/ITERATION_CONTRACT.md",
     "checkpoint_evidence": "GitHub issue/control board",
     "runtime_state": "PostgreSQL/Supabase",
     "verification": "CI/evals"
