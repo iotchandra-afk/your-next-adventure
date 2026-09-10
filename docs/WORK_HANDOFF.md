@@ -1,6 +1,6 @@
 # Persistent Execution Handoff
 
-**Purpose:** move sustained YourNextAdventure implementation from synchronous chat into a persistent execution surface without losing product intent, authority, stop conditions, or product potency across repeated implementation cycles.
+**Purpose:** move sustained YourNextAdventure implementation from synchronous chat into a persistent execution surface without losing product intent, authority, stop conditions, product potency, or cross-layer correctness across repeated implementation cycles.
 
 ## Preferred execution surface
 
@@ -15,73 +15,55 @@ Give the persistent runner this instruction:
 ```text
 Continue implementation of the public GitHub repository iotchandra-afk/your-next-adventure.
 
-Before changing anything, read and obey, in order:
+Before changing anything, read and obey CURRENT main, in order:
 1. AGENTS.md
 2. SPEC.md
 3. SPEC_MANIFEST.json
 4. contracts/execution_policy.v1.json
-5. docs/EXECUTION_MODEL.md
-6. docs/GLASS_COCKPIT.md
-7. docs/ITERATION_CONTRACT.md
-8. docs/DRILLDOWN_ACCEPTANCE.md
-9. docs/DISCOVERY_RECALL_ACCEPTANCE.md
-10. GitHub Issue #1 go-live control board
-11. GitHub Issue #3 P0 drill-down defect
-12. GitHub Issue #4 P0 broad-market discovery recall defect
+5. contracts/product_invariants.v1.json
+6. docs/EXECUTION_MODEL.md
+7. docs/GLASS_COCKPIT.md
+8. docs/ITERATION_CONTRACT.md
+9. docs/DELIVERY_ASSURANCE_CONTRACT.md
+10. docs/DRILLDOWN_ACCEPTANCE.md
+11. docs/DISCOVERY_RECALL_ACCEPTANCE.md
+12. GitHub Issue #1 go-live control board
+13. all open P0/P1 issues
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
 
-CURRENT P0 PRODUCT DEFECTS FROM OWNER REVIEW:
-
-P0-A — DRILL-DOWN / SOURCE ACCESS
-- the deployed cockpit still has consequential surfaces that do not drill down;
-- implement docs/DRILLDOWN_ACCEPTANCE.md completely;
-- every Intake role or source record with a persisted canonical/discovery URL must expose a one-click `Open posting ↗` / source link;
-- opportunity decision glass should also expose the canonical posting near the role identity;
-- no visible consequential card/count/row may be a dead end.
-
-P0-B — BROAD-MARKET DISCOVERY RECALL
-- the current runtime proves several ATS adapters work but polls only a limited static employer registry;
-- independently discoverable relevant executive opportunities have been missed because their companies/sources are outside that registry;
-- implement docs/DISCOVERY_RECALL_ACCEPTANCE.md and Issue #4;
-- add a durable DISCOVERY_SIGNAL ingestion path;
-- activate market discovery independent of the static employer list;
-- reconcile a bounded private set of recent live-scan opportunities against canonical intake and explain every miss;
-- source coverage and source health are different metrics;
-- do not certify CP2 broad discovery PASS until recall acceptance is satisfied.
+SYSTEMIC DELIVERY ASSURANCE IS MANDATORY:
+- before each material change, build a change-impact map from source -> canonical state -> state transitions -> model/rule decision -> UI query -> label/badge/count -> drill-down/evidence -> runtime capacity;
+- identify every affected invariant in contracts/product_invariants.v1.json;
+- test both what SHOULD happen and what MUST NOT happen;
+- never map null/missing/unprocessed state into a substantive business outcome for display;
+- never allow a human-facing label/count to imply more processing or certainty than the backing state supports;
+- when processing is incomplete or runtime is degraded, fail safe and show backlog/degraded semantics instead of a misleading zero or recommendation;
+- verify state transitions, idempotency, stale RUNNING recovery, provider backpressure, and backlog age for model-driven workers;
+- all model callers must obey shared per-model capacity/backpressure; workflow-level concurrency alone is not sufficient;
+- user-visible acceptance requires deployed verification against current canonical runtime state;
+- a builder may not self-certify solely from its own implementation path; use an independent invariant/reconciliation/eval mechanism;
+- any contradictory owner/runtime evidence automatically falsifies the prior PASS and reopens the checkpoint.
 
 POTENCY-PRESERVING REITERATION IS MANDATORY:
-- fixing P0-A and P0-B is not the end of the run;
-- after every material slice, execute docs/ITERATION_CONTRACT.md;
-- re-read current authority, inspect current main/runtime/deployed product, and re-evaluate the WHOLE product against the core objective;
-- red-team prior PASS claims and reopen them when new evidence disproves them;
-- identify the highest-value remaining weakness across the entire authorized scope, not merely the files or issue just touched;
-- implement the next end-to-end slice, verify with real data and deployed behavior, persist evidence, then reiterate again;
-- do not weaken requirements, narrow scope, substitute proxy metrics, or optimize for easy checklist completion merely to reach DONE;
-- `REITERATE` is an internal execution action, never a user-facing status message.
-
-The delegated task is the full authorized go-live scope, NOT the completion of one PR, one CI run, one deployment, one checkpoint, one defect, or one engineering time slice.
-
-Default behavior is autonomous execution. Do not send routine status, progress, checkpoint-pass, PR-ready, merge-ready, deployment-ready, test, retry, debugging, or reiteration messages. Persist evidence to GitHub/control plane and continue.
+- completing one defect, PR, deployment, or P0 is not the end of the run;
+- after every material slice, execute docs/ITERATION_CONTRACT.md and docs/DELIVERY_ASSURANCE_CONTRACT.md;
+- re-read current authority, inspect current main/runtime/deployed product, red-team the WHOLE system, select the highest-value remaining weakness, implement it end-to-end, verify it, persist evidence, and reiterate;
+- do not weaken requirements, narrow scope, substitute proxy metrics, or optimize for checklist completion merely to reach DONE;
+- REITERATE is an internal action, never a user-facing status message.
 
 IMPORTANT CONTROL-PLANE WRITE RULE:
-- `OUTBOUND_COMMUNICATION_SEND` means human-facing communication to a person or external audience outside this project's control plane;
-- creating/updating a GitHub PR, PR title/body, GitHub issue, issue/PR control-plane comment, control-board entry, implementation evidence, commit, branch, tag, or authorized Supabase runtime evidence is NOT outbound candidate communication;
-- these project-control writes are routine autonomous actions when inside authorized scope, contain no prohibited private candidate data/secrets, and cross no other reserved boundary;
-- do NOT ask the user to approve creating a PR or writing its implementation/evidence body;
-- do NOT ask the user to approve an issue/comment merely because another human could technically read the public repository;
-- public-repository privacy rules still apply: never put private candidate data or secrets into those writes.
+- OUTBOUND_COMMUNICATION_SEND means human-facing communication to a person or external audience outside this project's control plane;
+- repository-native PR/issue/comment/control-board writes and authorized Supabase runtime evidence are autonomous project-control actions when inside authorized scope, contain no prohibited private candidate data/secrets, and cross no other reserved boundary;
+- do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or ordinary reversible GitHub Pages deployment.
 
 IMPORTANT MERGE/DEPLOY RULE:
-- "production" is not by itself an approval boundary;
-- routine reversible merges to main are autonomous when within authorized scope, required checks pass, no reserved boundary changes, and normal rollback exists;
-- routine GitHub Pages deployments triggered from main are autonomous under the same conditions;
-- additive/non-destructive schema migrations already required by the approved architecture are autonomous;
-- if an open PR is stale or non-mergeable because main advanced, update/rebase it, resolve routine conflicts, rerun checks, merge when safe, verify deployment, and continue;
-- do NOT ask the user to approve a squash merge or ordinary Pages deployment merely because it is production;
-- PR created, PR ready, CI passed, merge ready, deployment ready, deployment complete, P0 fixed, and checkpoint passed are internal execution events, not DONE.
-
-Only destructive/materially irreversible production operations remain approval-gated, along with the other reserved boundaries below.
+- production is not by itself an approval boundary;
+- routine reversible merges/deployments and additive non-destructive migrations are autonomous when within scope and safe;
+- before treating a material slice as complete, affected product invariants must pass;
+- after deploy, reconcile deployed behavior with canonical runtime state when applicable;
+- if verification fails, autonomously repair, retry, roll forward, or safely roll back and reverify before escalating;
+- PR created, PR ready, CI passed, merge complete, deployment complete, P0 fixed, and checkpoint passed are internal execution events, not DONE.
 
 Return to the user only for exactly one of:
 BLOCKED
@@ -98,29 +80,25 @@ Reserved approval boundaries are exactly:
 
 Never put private candidate data or secrets into the public repository.
 
-Continue through the established go-live checkpoints and specifications until a real stop condition is reached. Do not voluntarily stop because an internal engineering unit completed. If the persistent execution environment remains active, execute the potency-preserving iteration loop and begin the next highest-value unmet requirement.
+Continue through the authorized go-live scope until a real stop condition is reached. Do not voluntarily stop because one engineering unit completed. While the persistent execution environment remains active, keep executing the assurance + iteration loop.
 ```
 
 ## Handoff acceptance test
 
-The persistent runner is considered correctly initialized only after it has:
+The persistent runner is correctly initialized only after it has:
 
-- read the normative files above, including `docs/ITERATION_CONTRACT.md`;
-- inspected current `main`, open/active PRs and workflow runs, Issue #1, Issue #3, and Issue #4;
-- inspected current Supabase runtime state before making state-dependent claims;
-- confirmed that implementation remains authorized;
+- read the current normative files, including product invariants and delivery assurance;
+- inspected current main, open PRs/issues/workflows, and current Supabase state;
+- confirmed implementation remains authorized;
 - resumed from durable state without asking the user to restate prior decisions;
-- treated `docs/DRILLDOWN_ACCEPTANCE.md` as P0 until verified;
-- treated `docs/DISCOVERY_RECALL_ACCEPTANCE.md` as P0 until verified;
-- recognized that working ATS adapters do not by themselves prove broad-market recall;
-- recognized that fixing the current P0s does not end the run;
-- applied the whole-system red-team and reiteration loop after material slices;
-- treated prior checkpoint PASS decisions as falsifiable when new evidence contradicts them;
-- refused to weaken requirements or replace end-to-end verification with easier proxy evidence;
-- recognized that repository-native PR/issue/comment/control-board writes are internal control-plane actions, not `OUTBOUND_COMMUNICATION_SEND`;
-- treated routine reversible PR merge and GitHub Pages deployment as autonomous actions, not approval boundaries;
-- recognized that PR/CI/deploy/P0 completion is not project completion;
-- avoided a routine progress or reiteration response.
+- identified affected product invariants before material changes;
+- used positive and negative assertions;
+- treated null/unprocessed state as non-semantic rather than inventing decisions;
+- treated provider capacity/backpressure and stale RUNNING recovery as system responsibilities;
+- required deployed verification for user-visible changes;
+- treated prior PASS decisions as falsifiable;
+- iterated across the whole product rather than terminating at PR/P0 boundaries;
+- avoided routine progress or reiteration responses.
 
 ## Truth constraint
 
