@@ -157,3 +157,33 @@ def test_authority_headers_do_not_drift() -> None:
     assert "**Implementation authorization:** GRANTED" in spec
     assert "NOT GRANTED" not in spec
     assert "without authorizing implementation" not in architecture
+
+
+def test_persistent_runs_reiterate_without_weakening_product_objective() -> None:
+    manifest = json.loads((ROOT / "SPEC_MANIFEST.json").read_text(encoding="utf-8"))
+    policy = json.loads((ROOT / "contracts" / "execution_policy.v1.json").read_text(encoding="utf-8"))
+    handoff = (ROOT / "docs" / "WORK_HANDOFF.md").read_text(encoding="utf-8")
+    iteration = (ROOT / "docs" / "ITERATION_CONTRACT.md").read_text(encoding="utf-8")
+
+    assert manifest["iteration_contract"] == "docs/ITERATION_CONTRACT.md"
+    assert "docs/ITERATION_CONTRACT.md" in manifest["normative_sources"]
+    assert manifest["internal_post_slice_action"] == "REITERATE"
+    assert manifest["execution_surface_policy"]["persistent_runner_must_reiterate_across_material_slices"] is True
+    assert manifest["acceptance_contracts"]["potency_preserving_iteration"]["required_for_persistent_build_runs"] is True
+
+    reiteration = policy["iteration_policy"]
+    assert reiteration["enabled_for_persistent_runs"] is True
+    assert reiteration["after_material_slice"] == "REITERATE"
+    assert reiteration["reiterate_is_user_facing_message"] is False
+    assert reiteration["scope_for_next_iteration"] == "ENTIRE_AUTHORIZED_PRODUCT_SCOPE"
+    assert reiteration["prior_passes_are_falsifiable"] is True
+    assert reiteration["whole_system_red_team_required"] is True
+    assert reiteration["forbid_weakening_requirements_to_reach_done"] is True
+    assert reiteration["forbid_proxy_metric_substitution_for_required_outcome"] is True
+    assert reiteration["forbid_local_optimization_at_product_objective_expense"] is True
+
+    assert "POTENCY-PRESERVING REITERATION IS MANDATORY" in handoff
+    assert "fixing P0-A and P0-B is not the end of the run" in handoff
+    assert "The runner MUST NOT make progress look better by weakening the product." in iteration
+    assert "All prior PASS decisions are falsifiable." in iteration
+    assert "TASK INCOMPLETE" in iteration and "=> REITERATE" in iteration
