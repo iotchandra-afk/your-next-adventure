@@ -72,6 +72,7 @@
     "requirements_for_autonomous_merge_deploy": [
       "WITHIN_ALREADY_AUTHORIZED_SCOPE",
       "REQUIRED_CHECKS_PASS",
+      "AFFECTED_PRODUCT_INVARIANTS_PASS",
       "NO_RESERVED_BOUNDARY_CHANGE",
       "NORMAL_ROLLBACK_PATH_EXISTS"
     ],
@@ -82,6 +83,43 @@
       "MERGE_WHEN_SAFE",
       "VERIFY_DEPLOYMENT",
       "CONTINUE"
+    ]
+  },
+  "delivery_assurance_policy": {
+    "contract": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
+    "product_invariants": "contracts/product_invariants.v1.json",
+    "enabled_for_material_changes": true,
+    "change_impact_map_required": true,
+    "positive_assertions_required": true,
+    "negative_assertions_required": true,
+    "state_transition_verification_required_when_applicable": true,
+    "runtime_capacity_verification_required_for_model_workflows": true,
+    "runtime_reconciliation_required_when_applicable": true,
+    "deployed_verification_required_for_user_visible_changes": true,
+    "prior_pass_auto_falsified_by_contradictory_evidence": true,
+    "autonomous_repair_retry_or_safe_rollback_before_escalation": true,
+    "semantic_truth": {
+      "null_may_become_substantive_business_outcome": false,
+      "ui_may_invent_business_decision_for_display": false,
+      "labels_must_match_backing_query_state": true,
+      "incomplete_processing_may_be_presented_as_completed_zero": false
+    },
+    "runtime_backpressure": {
+      "shared_per_model_capacity_required": true,
+      "workflow_concurrency_must_align_to_model": true,
+      "in_process_parallelism_must_obey_capacity": true,
+      "provider_429_must_trigger_backpressure_not_retry_storm": true,
+      "stale_running_work_must_be_recoverable": true,
+      "backlog_count_and_oldest_age_must_be_observable": true
+    },
+    "verification_ladder": [
+      "CONTRACT_STATIC_CHECKS",
+      "UNIT_TESTS",
+      "STATE_TRANSITION_TESTS",
+      "GOLDEN_ADVERSARIAL_EVALS",
+      "RUNTIME_SMOKE",
+      "DEPLOYED_PRODUCT_VERIFICATION",
+      "POST_DEPLOY_RUNTIME_RECONCILIATION"
     ]
   },
   "iteration_policy": {
@@ -122,6 +160,11 @@
     "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN",
     "VERIFY_ROUTINE_DEPLOYMENT",
     "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION",
+    "BUILD_CHANGE_IMPACT_MAP",
+    "VERIFY_AFFECTED_PRODUCT_INVARIANTS",
+    "RUN_NEGATIVE_ASSERTIONS",
+    "RUNTIME_RECONCILIATION",
+    "SAFE_ROLLBACK_OR_ROLL_FORWARD",
     "WHOLE_SYSTEM_RED_TEAM",
     "REOPEN_INVALIDATED_CHECKPOINT",
     "REITERATE_TO_NEXT_HIGHEST_VALUE_REQUIREMENT"
@@ -146,12 +189,15 @@
     "SOURCE_SYNC_STATUS",
     "MODEL_RUN_STATUS",
     "REITERATION_STATUS",
+    "INVARIANT_CHECK_STATUS",
+    "RUNTIME_RECONCILIATION_STATUS",
     "REQUEST_TO_PROCEED",
     "REQUEST_TO_RECONFIRM_EXISTING_AUTHORITY"
   ],
   "checkpoint_behavior": {
     "on_pass": [
       "VERIFY",
+      "VERIFY_AFFECTED_PRODUCT_INVARIANTS",
       "PERSIST_EVIDENCE",
       "PERFORM_NEXT_SAFE_AUTHORIZED_ACTION",
       "WHOLE_SYSTEM_RED_TEAM",
@@ -170,12 +216,15 @@
     "checkpoint_reached_is_done": false,
     "p0_fixed_is_done": false,
     "done_requires_active_task_acceptance_criteria_satisfied": true,
+    "done_requires_all_affected_product_invariants_pass": true,
     "done_requires_no_known_contradictory_evidence": true,
     "done_requires_latest_whole_system_red_team_clear_of_material_go_live_blockers": true
   },
   "failure_behavior": {
     "recoverable_failure": "REMEDIATE_AND_CONTINUE",
     "consequential_unknown": "FAIL_CLOSED",
+    "invariant_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_CONTINUE",
+    "post_deploy_reconciliation_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_REVERIFY",
     "escalate_only_if_stop_condition": true,
     "bundle_unresolved_questions": true,
     "base_branch_drift": "REPAIR_AND_CONTINUE"
@@ -195,7 +244,9 @@
     "product_contract": "SPEC.md",
     "agent_contract": "AGENTS.md",
     "manifest": "SPEC_MANIFEST.json",
+    "product_invariants": "contracts/product_invariants.v1.json",
     "iteration_contract": "docs/ITERATION_CONTRACT.md",
+    "delivery_assurance_contract": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
     "checkpoint_evidence": "GitHub issue/control board",
     "runtime_state": "PostgreSQL/Supabase",
     "verification": "CI/evals"
