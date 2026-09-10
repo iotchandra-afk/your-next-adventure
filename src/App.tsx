@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
 import { groupCompanies } from './cockpit-model'
@@ -28,12 +28,18 @@ type Opportunity = {
   current_confidence: number | null
   first_seen_at: string
   company: { display_name: string } | null
+  opportunity_sources?: Array<{
+    is_primary: boolean
+    source_record: { canonical_url: string } | null
+  }>
 }
 type Source = {
   id: string
   display_name: string
   source_family: string
+  base_url: string
   health: string
+  last_sync_at: string | null
   last_success_at: string | null
   last_error: string | null
 }
@@ -44,6 +50,28 @@ type Activity = {
   created_at: string
   entity_type: string | null
   entity_id: string | null
+  details: Record<string, unknown> | null
+}
+type IngestionRun = {
+  id: string
+  started_at: string
+  finished_at: string | null
+  status: string
+  discovered_count: number
+  new_count: number
+  changed_count: number
+  duplicate_count: number
+  closed_count: number
+  error_count: number
+  error_text: string | null
+}
+type SourceRecord = {
+  id: string
+  external_id: string
+  canonical_url: string
+  state: string
+  first_seen_at: string
+  last_seen_at: string
 }
 type DecisionEvidence = {
   mandate_summary?: string
@@ -77,6 +105,7 @@ type Decision = {
   model_class: string | null
   model_id: string | null
   trace_id: string | null
+  supersedes_id: string | null
   created_at: string
 }
 type ModelRun = {
@@ -97,6 +126,7 @@ type IntelligenceRecord = {
   opportunity_id: string | null
   capability: string
   capability_version: string
+  status: string
   payload: Record<string, unknown>
   evidence: IntelligenceEvidence[] | null
   confidence: number | null
@@ -104,11 +134,14 @@ type IntelligenceRecord = {
   model_id: string | null
   reasoning_effort: string | null
   trace_id: string | null
+  supersedes_id: string | null
   created_at: string
+  updated_at: string
 }
 type OpportunityDetail = {
   opportunity: Opportunity
   decision: Decision | null
+  decisionHistory: Decision[]
   modelRun: ModelRun | null
   intelligence: IntelligenceRecord[]
 }
@@ -118,6 +151,25 @@ type CompanyView = {
   name: string
   opportunities: Opportunity[]
   trajectory: IntelligenceRecord | null
+}
+
+type OpportunitySetDetail = {
+  title: string
+  description: string
+  opportunities: Opportunity[]
+}
+
+type SourceDetail = {
+  source: Source
+  runs: IngestionRun[]
+  records: SourceRecord[]
+  recordCount: number
+  opportunities: Opportunity[]
+}
+
+type CompanyDetail = {
+  company: CompanyView
+  intelligence: IntelligenceRecord[]
 }
 
 type Stakeholder = {
@@ -144,7 +196,9 @@ const emptySummary: Summary = {
   needs_data: 0,
 }
 
-const intelligenceSelect = 'id,company_id,opportunity_id,capability,capability_version,payload,evidence,confidence,policy_version,model_id,reasoning_effort,trace_id,created_at'
+const intelligenceSelect = 'id,company_id,opportunity_id,capability,capability_version,status,payload,evidence,confidence,policy_version,model_id,reasoning_effort,trace_id,supersedes_id,created_at,updated_at'
+const opportunitySelect = 'id,company_id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name),opportunity_sources(is_primary,source_record:source_records(canonical_url))'
+const lastDay = () => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -162,6 +216,13 @@ function App() {
   const [detail, setDetail] = useState<OpportunityDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [opportunitySet, setOpportunitySet] = useState<OpportunitySetDetail | null>(null)
+  const [sourceDetail, setSourceDetail] = useState<SourceDetail | null>(null)
+  const [companyDetail, setCompanyDetail] = useState<CompanyDetail | null>(null)
+  const [activityDetail, setActivityDetail] = useState<Activity | null>(null)
+  const [activitySet, setActivitySet] = useState<Activity[] | null>(null)
+  const [drilldownLoading, setDrilldownLoading] = useState('')
+  const [drilldownError, setDrilldownError] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -183,16 +244,16 @@ function App() {
     const [summaryResult, oppResult, sourceResult, activityResult, grayResult, companyIntelResult] = await Promise.all([
       supabase.rpc('intake_summary', { hours_back: 24 }),
       supabase.from('opportunities')
-        .select('id,company_id,title,location,priority_class,screening_stage,current_reason_code,current_reason_text,current_confidence,first_seen_at,company:companies(display_name)')
+        .select(opportunitySelect)
         .eq('visibility', 'SURFACED')
         .order('first_seen_at', { ascending: false })
         .limit(50),
       supabase.from('source_registry')
-        .select('id,display_name,source_family,health,last_success_at,last_error')
+        .select('id,display_name,source_family,base_url,health,last_sync_at,last_success_at,last_error')
         .eq('enabled', true)
         .order('display_name'),
       supabase.from('activity_events')
-        .select('id,severity,message,created_at,entity_type,entity_id')
+        .select('id,severity,message,created_at,entity_type,entity_id,details')
         .order('created_at', { ascending: false })
         .limit(24),
       supabase.from('opportunities').select('id', { count: 'exact', head: true }).eq('visibility', 'GRAY_ZONE'),
@@ -222,7 +283,6 @@ function App() {
     const roleIntelQuery = supabase.from('intelligence_records')
       .select(intelligenceSelect)
       .eq('opportunity_id', role.id)
-      .eq('status', 'COMPLETED')
       .order('created_at', { ascending: false })
       .limit(40)
     const companyIntelQuery = role.company_id
@@ -230,18 +290,16 @@ function App() {
           .select(intelligenceSelect)
           .eq('company_id', role.company_id)
           .is('opportunity_id', null)
-          .eq('status', 'COMPLETED')
           .order('created_at', { ascending: false })
           .limit(20)
       : Promise.resolve({ data: [], error: null })
 
     const [decisionResult, roleIntelResult, companyIntelResult] = await Promise.all([
       supabase.from('screening_decisions')
-        .select('id,stage,outcome,reason_code,reason_text,confidence,evidence,policy_version,evaluator_type,model_class,model_id,trace_id,created_at')
+        .select('id,stage,outcome,reason_code,reason_text,confidence,evidence,policy_version,evaluator_type,model_class,model_id,trace_id,supersedes_id,created_at')
         .eq('opportunity_id', role.id)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(20),
       roleIntelQuery,
       companyIntelQuery,
     ])
@@ -253,7 +311,8 @@ function App() {
       return
     }
 
-    const decision = (decisionResult.data ?? null) as Decision | null
+    const decisionHistory = (decisionResult.data ?? []) as Decision[]
+    const decision = decisionHistory[0] ?? null
     let modelRun: ModelRun | null = null
     if (decision?.trace_id) {
       const modelResult = await supabase.from('model_runs')
@@ -274,8 +333,119 @@ function App() {
       ...((roleIntelResult.data ?? []) as unknown as IntelligenceRecord[]),
       ...((companyIntelResult.data ?? []) as unknown as IntelligenceRecord[]),
     ]
-    setDetail({ opportunity: role, decision, modelRun, intelligence: latestByCapability(allIntel) })
+    setDetail({ opportunity: role, decision, decisionHistory, modelRun, intelligence: allIntel })
     setDetailLoading(false)
+  }
+
+  async function openOpportunitySet(kind: string, title: string, description: string) {
+    setDrilldownLoading(title)
+    setDrilldownError('')
+    setOpportunitySet(null)
+    try {
+      let rows: Opportunity[] = []
+      if (kind === 'discovered') {
+        const recordsResult = await supabase.from('source_records').select('id').gte('first_seen_at', lastDay()).order('first_seen_at', { ascending: false }).limit(500)
+        if (recordsResult.error) throw recordsResult.error
+        const recordIds = (recordsResult.data ?? []).map((record) => record.id)
+        if (recordIds.length) {
+          const linksResult = await supabase.from('opportunity_sources').select('opportunity_id').in('source_record_id', recordIds)
+          if (linksResult.error) throw linksResult.error
+          const opportunityIds = [...new Set((linksResult.data ?? []).map((link) => link.opportunity_id))]
+          if (opportunityIds.length) {
+            const result = await supabase.from('opportunities').select(opportunitySelect).in('id', opportunityIds).order('first_seen_at', { ascending: false }).limit(100)
+            if (result.error) throw result.error
+            rows = (result.data ?? []) as unknown as Opportunity[]
+          }
+        }
+      } else {
+        let query = supabase.from('opportunities').select(opportunitySelect).order('first_seen_at', { ascending: false }).limit(100)
+        if (kind !== 'gray') query = query.gte('first_seen_at', lastDay())
+        if (kind === 'canonical') query = query
+        if (kind === 'eligible') query = query.in('screening_stage', ['ELIGIBLE', 'TRIAGE_CLEAR_NO', 'TRIAGE_POSSIBLE', 'TRIAGE_RELEVANT', 'DEEP_QUALIFY', 'PRIORITIZED'])
+        if (kind === 'relevant') query = query.eq('visibility', 'SURFACED')
+        if (kind === 'priority') query = query.in('priority_class', ['TIER_1', 'TIER_2'])
+        if (kind === 'tier_1') query = query.eq('priority_class', 'TIER_1')
+        if (kind === 'tier_2') query = query.eq('priority_class', 'TIER_2')
+        if (kind === 'monitor') query = query.eq('priority_class', 'MONITOR')
+        if (kind === 'gray') query = query.eq('visibility', 'GRAY_ZONE')
+        if (kind === 'clear_no') query = query.eq('screening_stage', 'TRIAGE_CLEAR_NO')
+        if (kind === 'possible') query = query.eq('screening_stage', 'TRIAGE_POSSIBLE')
+        if (kind === 'needs_data') query = query.eq('priority_class', 'NEEDS_DATA')
+        const result = await query
+        if (result.error) throw result.error
+        rows = (result.data ?? []) as unknown as Opportunity[]
+      }
+      setOpportunitySet({ title, description, opportunities: rows })
+    } catch (error) {
+      setDrilldownError(error instanceof Error ? error.message : 'The underlying role set could not be loaded.')
+    } finally {
+      setDrilldownLoading('')
+    }
+  }
+
+  async function openSource(source: Source) {
+    setDrilldownLoading(source.display_name)
+    setDrilldownError('')
+    setSourceDetail(null)
+    try {
+      const [runsResult, recordsResult] = await Promise.all([
+        supabase.from('ingestion_runs').select('id,started_at,finished_at,status,discovered_count,new_count,changed_count,duplicate_count,closed_count,error_count,error_text').eq('source_id', source.id).order('started_at', { ascending: false }).limit(8),
+        supabase.from('source_records').select('id,external_id,canonical_url,state,first_seen_at,last_seen_at', { count: 'exact' }).eq('source_id', source.id).order('last_seen_at', { ascending: false }).limit(30),
+      ])
+      const firstError = runsResult.error ?? recordsResult.error
+      if (firstError) throw firstError
+      const records = (recordsResult.data ?? []) as SourceRecord[]
+      let sourceOpportunities: Opportunity[] = []
+      if (records.length) {
+        const linksResult = await supabase.from('opportunity_sources').select('opportunity_id').in('source_record_id', records.map((record) => record.id))
+        if (linksResult.error) throw linksResult.error
+        const ids = [...new Set((linksResult.data ?? []).map((link) => link.opportunity_id))]
+        if (ids.length) {
+          const opportunitiesResult = await supabase.from('opportunities').select(opportunitySelect).in('id', ids).order('last_seen_at', { ascending: false }).limit(30)
+          if (opportunitiesResult.error) throw opportunitiesResult.error
+          sourceOpportunities = (opportunitiesResult.data ?? []) as unknown as Opportunity[]
+        }
+      }
+      setSourceDetail({ source, runs: (runsResult.data ?? []) as IngestionRun[], records, recordCount: recordsResult.count ?? records.length, opportunities: sourceOpportunities })
+    } catch (error) {
+      setDrilldownError(error instanceof Error ? error.message : 'Source detail could not be loaded.')
+    } finally {
+      setDrilldownLoading('')
+    }
+  }
+
+  async function openCompany(company: CompanyView) {
+    setDrilldownLoading(company.name)
+    setDrilldownError('')
+    setCompanyDetail(null)
+    const result = await supabase.from('intelligence_records').select(intelligenceSelect).eq('company_id', company.id).eq('status', 'COMPLETED').order('created_at', { ascending: false }).limit(100)
+    if (result.error) setDrilldownError(result.error.message)
+    else setCompanyDetail({ company, intelligence: (result.data ?? []) as unknown as IntelligenceRecord[] })
+    setDrilldownLoading('')
+  }
+
+  async function openActivity(event: Activity) {
+    if (event.entity_type === 'opportunity' && event.entity_id) {
+      const loaded = opportunities.find((role) => role.id === event.entity_id)
+      if (loaded) return void openOpportunity(loaded)
+      setDrilldownLoading('Linked opportunity')
+      const result = await supabase.from('opportunities').select(opportunitySelect).eq('id', event.entity_id).maybeSingle()
+      setDrilldownLoading('')
+      if (result.error) return setDrilldownError(result.error.message)
+      if (result.data) return void openOpportunity(result.data as unknown as Opportunity)
+    }
+    if (event.entity_type === 'source' && event.entity_id) {
+      let source = sources.find((item) => item.id === event.entity_id)
+      if (!source) {
+        setDrilldownLoading('Linked source')
+        const result = await supabase.from('source_registry').select('id,display_name,source_family,base_url,health,last_sync_at,last_success_at,last_error').eq('id', event.entity_id).maybeSingle()
+        setDrilldownLoading('')
+        if (result.error) return setDrilldownError(result.error.message)
+        source = (result.data ?? undefined) as Source | undefined
+      }
+      if (source) return void openSource(source)
+    }
+    setActivityDetail(event)
   }
 
   async function sendMagicLink(event: FormEvent) {
@@ -308,6 +478,7 @@ function App() {
 
   const actionRequired = activity.filter((event) => event.severity === 'ACTION_REQUIRED').length
   const runtimeHealthy = !loadError && sources.length > 0 && sources.every((source) => source.health === 'HEALTHY')
+  const overlayBusy = detailLoading || Boolean(drilldownLoading) || Boolean(drilldownError) || Boolean(detailError)
 
   return (
     <div className="shell">
@@ -333,36 +504,43 @@ function App() {
         <main className="content">
           {loading && <p className="muted" aria-live="polite">Loading current state...</p>}
           {loadError && <div className="error-banner" role="alert">Live data error: {loadError}</div>}
-          {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} />}
-          {!loading && page === 'Intake' && <Intake summary={summary} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} />}
+          {!loading && page === 'Home' && <Home summary={summary} opportunities={opportunities} grayZoneCount={grayZoneCount} actionRequired={actionRequired} onOpen={openOpportunity} onDrill={openOpportunitySet} onNeedsMe={() => setActivitySet(activity.filter((event) => event.severity === 'ACTION_REQUIRED'))} />}
+          {!loading && page === 'Intake' && <Intake summary={summary} sources={sources} opportunities={opportunities} grayZoneCount={grayZoneCount} onOpen={openOpportunity} onDrill={openOpportunitySet} onSource={openSource} />}
           {!loading && page === 'Opportunities' && <OpportunityList opportunities={opportunities} onOpen={openOpportunity} />}
-          {!loading && page === 'Companies' && <CompanyList companies={companies} onOpen={openOpportunity} />}
+          {!loading && page === 'Companies' && <CompanyList companies={companies} onOpen={openOpportunity} onCompany={openCompany} />}
         </main>
-        <ActivityRail activity={activity} />
+        <ActivityRail activity={activity} onOpen={openActivity} />
       </div>
-      {detailLoading && <div className="drawer-backdrop"><section className="decision-drawer"><p className="muted">Loading decision trace...</p></section></div>}
+      {opportunitySet && !detail && !overlayBusy && <OpportunitySetDrawer detail={opportunitySet} onOpen={openOpportunity} onClose={() => setOpportunitySet(null)} />}
+      {companyDetail && !detail && !overlayBusy && <CompanyDrawer detail={companyDetail} onOpen={openOpportunity} onClose={() => setCompanyDetail(null)} />}
+      {activitySet && !sourceDetail && !activityDetail && !detail && !overlayBusy && <ActivitySetDrawer events={activitySet} onOpen={openActivity} onClose={() => setActivitySet(null)} />}
+      {sourceDetail && !detail && !overlayBusy && <SourceDrawer detail={sourceDetail} onOpen={openOpportunity} onClose={() => setSourceDetail(null)} />}
+      {activityDetail && !detail && !overlayBusy && <ActivityDrawer event={activityDetail} onClose={() => setActivityDetail(null)} />}
+      {detailLoading && <div className="drawer-backdrop"><section className="decision-drawer" aria-live="polite"><p className="muted">Loading decision trace...</p></section></div>}
+      {drilldownLoading && <div className="drawer-backdrop"><section className="decision-drawer" aria-live="polite"><p className="muted">Loading {drilldownLoading}...</p></section></div>}
+      {drilldownError && <ErrorDrawer message={drilldownError} onClose={() => setDrilldownError('')} />}
       {detailError && <div className="drawer-backdrop" onMouseDown={() => setDetailError('')}><section className="decision-drawer" role="dialog" aria-modal="true" aria-label="Decision detail error" onMouseDown={(e) => e.stopPropagation()}><div className="drawer-head"><h2>Decision detail unavailable</h2><button className="close" aria-label="Close error" onClick={() => setDetailError('')}>×</button></div><div className="error-banner" role="alert">{detailError}</div></section></div>}
       {detail && <DecisionDrawer detail={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
 
-function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen }: { summary: Summary; opportunities: Opportunity[]; grayZoneCount: number; actionRequired: number; onOpen: (role: Opportunity) => void }) {
+function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen, onDrill, onNeedsMe }: { summary: Summary; opportunities: Opportunity[]; grayZoneCount: number; actionRequired: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onNeedsMe: () => void }) {
   return (
     <>
       <section className="hero-row">
         <div>
           <div className="eyebrow">WHAT MATTERS NOW</div>
-          <h2>{summary.relevant} relevant opportunities surfaced in the last 24 hours</h2>
+          <button className="conclusion-link" onClick={() => void onDrill('relevant', 'Relevant opportunities', 'Roles surfaced by mandate-aware relevance screening in the last 24 hours.')}><span>{summary.relevant} relevant opportunities surfaced in the last 24 hours</span><small>Inspect underlying roles →</small></button>
           <p className="muted">Broad discovery stays below the glass. Only roles that clear mandate-aware relevance screening enter this view.</p>
         </div>
-        <div className="needs-me"><strong>{actionRequired}</strong><span>Needs me</span></div>
+        <button className="needs-me interactive-card" onClick={onNeedsMe}><strong>{actionRequired}</strong><span>Needs me · inspect →</span></button>
       </section>
       <div className="metric-grid">
-        <Metric label="Tier 1" value={summary.tier_1} />
-        <Metric label="Tier 2" value={summary.tier_2} />
-        <Metric label="Monitor" value={summary.monitor} />
-        <Metric label="Gray zone · system-held" value={grayZoneCount} />
+        <Metric label="Tier 1" value={summary.tier_1} onClick={() => void onDrill('tier_1', 'Tier 1 opportunities', 'Highest-priority surfaced roles first seen in the last 24 hours.')} />
+        <Metric label="Tier 2" value={summary.tier_2} onClick={() => void onDrill('tier_2', 'Tier 2 opportunities', 'Worth-pursuing surfaced roles first seen in the last 24 hours.')} />
+        <Metric label="Monitor" value={summary.monitor} onClick={() => void onDrill('monitor', 'Monitor opportunities', 'Surfaced roles currently held for monitoring and first seen in the last 24 hours.')} />
+        <Metric label="Gray zone · system-held" value={grayZoneCount} onClick={() => void onDrill('gray', 'Gray-zone audit set', 'Ambiguous roles retained for system follow-up rather than hidden as clear-no decisions.')} />
       </div>
       <section className="panel">
         <div className="panel-title"><h3>Priority opportunities</h3><span>{opportunities.length} visible</span></div>
@@ -372,13 +550,13 @@ function Home({ summary, opportunities, grayZoneCount, actionRequired, onOpen }:
   )
 }
 
-function Intake({ summary, sources, opportunities, grayZoneCount, onOpen }: { summary: Summary; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void }) {
+function Intake({ summary, sources, opportunities, grayZoneCount, onOpen, onDrill, onSource }: { summary: Summary; sources: Source[]; opportunities: Opportunity[]; grayZoneCount: number; onOpen: (role: Opportunity) => void; onDrill: (kind: string, title: string, description: string) => void; onSource: (source: Source) => void }) {
   const funnel = [
-    ['Signals discovered', summary.discovered],
-    ['Canonical roles', summary.canonical],
-    ['Executive eligible', summary.executive_eligible],
-    ['Relevant', summary.relevant],
-    ['Priority', summary.tier_1 + summary.tier_2],
+    ['discovered', 'Signals discovered', summary.discovered],
+    ['canonical', 'Canonical roles', summary.canonical],
+    ['eligible', 'Executive eligible', summary.executive_eligible],
+    ['relevant', 'Relevant', summary.relevant],
+    ['priority', 'Priority', summary.tier_1 + summary.tier_2],
   ] as const
   return (
     <>
@@ -386,24 +564,24 @@ function Intake({ summary, sources, opportunities, grayZoneCount, onOpen }: { su
       <h2>Broad discovery. Narrow human attention.</h2>
       <p className="muted">The raw universe remains auditable but hidden by default. Hard rejects require high confidence. Ambiguous roles stay in the gray zone for system follow-up instead of disappearing.</p>
       <section className="panel funnel">
-        {funnel.map(([label, value], index) => <div className="funnel-step" key={label}><span>{label}</span><strong>{value}</strong>{index < funnel.length - 1 && <i>→</i>}</div>)}
+        {funnel.map(([kind, label, value], index) => <div className="funnel-step" key={label}><button onClick={() => void onDrill(kind, label, `Underlying canonical roles for the ${label.toLowerCase()} stage in the last 24 hours.`)}><span>{label}</span><strong>{value}</strong><small>Inspect →</small></button>{index < funnel.length - 1 && <i>→</i>}</div>)}
       </section>
       <div className="split-grid">
         <section className="panel">
           <div className="panel-title"><h3>Source health</h3><span>{sources.length} enabled</span></div>
           {sources.length === 0 ? <p className="muted">No source state available.</p> : sources.map((source) => (
-            <div className="source-row" key={source.id}>
+            <button className="source-row interactive-row" key={source.id} onClick={() => void onSource(source)}>
               <div><strong>{source.display_name}</strong><small>{source.source_family} · {source.last_success_at ? `healthy ${relativeTime(source.last_success_at)}` : 'awaiting first success'}</small>{source.last_error && <small className="source-error">{source.last_error}</small>}</div>
-              <span className={`health ${source.health.toLowerCase()}`}>{source.health}</span>
-            </div>
+              <div className="role-actions"><span className={`health ${source.health.toLowerCase()}`}>{source.health}</span><span className="inspect">Inspect source →</span></div>
+            </button>
           ))}
         </section>
         <section className="panel">
           <div className="panel-title"><h3>Screening outcomes</h3><span>last 24h</span></div>
-          <StatRow label="Clear no, retained but hidden" value={summary.clear_no} />
-          <StatRow label="Possible / gray zone" value={Math.max(summary.possible_fit, grayZoneCount)} />
-          <StatRow label="Relevant and surfaced" value={summary.relevant} />
-          <StatRow label="Needs data" value={summary.needs_data} />
+          <StatRow label="Clear no, retained but hidden" value={summary.clear_no} onClick={() => void onDrill('clear_no', 'Clear-no audit set', 'High-confidence exclusions from the last 24 hours, retained with reason and evidence.')} />
+          <StatRow label="Possible / gray zone" value={Math.max(summary.possible_fit, grayZoneCount)} onClick={() => void onDrill('gray', 'Possible / gray-zone roles', 'Ambiguous roles retained for follow-up rather than silently discarded.')} />
+          <StatRow label="Relevant and surfaced" value={summary.relevant} onClick={() => void onDrill('relevant', 'Relevant surfaced roles', 'Roles surfaced by relevance screening in the last 24 hours.')} />
+          <StatRow label="Needs data" value={summary.needs_data} onClick={() => void onDrill('needs_data', 'Needs-data roles', 'Roles whose current priority is blocked on material missing evidence.')} />
         </section>
       </div>
       <section className="panel">
@@ -418,11 +596,11 @@ function OpportunityList({ opportunities, onOpen }: { opportunities: Opportunity
   return <><div className="eyebrow">PURSUIT PORTFOLIO</div><h2>Opportunities</h2><p className="muted">This is not the internet. Every role here has already cleared mandate-aware relevance screening.</p><section className="panel"><OpportunityRows opportunities={opportunities} onOpen={onOpen} /></section></>
 }
 
-function CompanyList({ companies, onOpen }: { companies: CompanyView[]; onOpen: (role: Opportunity) => void }) {
+function CompanyList({ companies, onOpen, onCompany }: { companies: CompanyView[]; onOpen: (role: Opportunity) => void; onCompany: (company: CompanyView) => void }) {
   return <><div className="eyebrow">AGGREGATION LENS</div><h2>Companies</h2><p className="muted">Reusable company intelligence and surfaced mandates stay together without turning the product into a CRM.</p><div className="company-grid">{companies.length === 0 ? <section className="panel"><p className="muted">No surfaced company opportunities yet.</p></section> : companies.map((company) => {
     const trajectory = company.trajectory
     return <section className="panel company-card" key={company.id}>
-      <div className="panel-title"><h3>{company.name}</h3><span>{company.opportunities.length} relevant role{company.opportunities.length === 1 ? '' : 's'}</span></div>
+      <div className="panel-title"><h3>{company.name}</h3><button className="inspect-link" onClick={() => void onCompany(company)}>{company.opportunities.length} relevant role{company.opportunities.length === 1 ? '' : 's'} · Inspect company →</button></div>
       {trajectory ? <div className="company-intelligence">
         <div className="intel-head"><strong>{payloadText(trajectory, 'current_health') ?? 'Current health not established.'}</strong><Confidence value={trajectory.confidence} /></div>
         <p>{payloadText(trajectory, 'why_now_for_role') ?? payloadList(trajectory, 'biggest_pain_points')[0] ?? 'No company-level why-now conclusion yet.'}</p>
@@ -436,30 +614,102 @@ function CompanyList({ companies, onOpen }: { companies: CompanyView[]; onOpen: 
 function OpportunityRows({ opportunities, onOpen }: { opportunities: Opportunity[]; onOpen: (role: Opportunity) => void }) {
   if (opportunities.length === 0) return <p className="muted">No roles have cleared the relevance gate yet.</p>
   return <div>{opportunities.map((role) => (
-    <button className="opportunity-row opportunity-button" key={role.id} onClick={() => onOpen(role)}>
-      <div>
+    <div className="opportunity-row" key={role.id}>
+      <button className="opportunity-main" onClick={() => onOpen(role)}>
         <div className="role-title">{role.title}</div>
         <div className="role-meta">{role.company?.display_name ?? 'Company pending'}{role.location ? ` · ${role.location}` : ''}</div>
         {role.current_reason_text && <div className="reason">{role.current_reason_text}</div>}
-      </div>
-      <div className="role-actions"><span className={`priority ${(role.priority_class ?? 'needs_data').toLowerCase()}`}>{(role.priority_class ?? 'NEEDS_DATA').replace('_', ' ')}</span><span className="inspect">Inspect →</span></div>
-    </button>
+      </button>
+      <div className="role-actions"><span className={`priority ${(role.priority_class ?? 'needs_data').toLowerCase()}`}>{(role.priority_class ?? 'NEEDS_DATA').replace('_', ' ')}</span>{postingUrl(role) ? <a className="posting-link" href={postingUrl(role)} target="_blank" rel="noreferrer">Open posting ↗</a> : <span className="source-unavailable">Source URL unavailable</span>}<button className="inspect-link" onClick={() => onOpen(role)}>Decision glass →</button></div>
+    </div>
   ))}</div>
 }
 
-function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClose: () => void }) {
+function DrawerShell({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode }) {
+  const titleId = useId()
+  const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    closeRef.current?.focus()
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      previousFocus?.focus()
+    }
+  }, [onClose])
+  return <div className="drawer-backdrop" onMouseDown={onClose}><section className="decision-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">{eyebrow}</div><h2 id={titleId}>{title}</h2></div><button ref={closeRef} className="close" aria-label={`Close ${title}`} onClick={onClose}>×</button></div>{children}</section></div>
+}
+
+function ErrorDrawer({ message, onClose }: { message: string; onClose: () => void }) {
+  return <DrawerShell title="Drill-down unavailable" eyebrow="QUERY FAILURE" onClose={onClose}><div className="error-banner" role="alert">{message}</div></DrawerShell>
+}
+
+function OpportunitySetDrawer({ detail, onOpen, onClose }: { detail: OpportunitySetDetail; onOpen: (role: Opportunity) => void; onClose: () => void }) {
+  return <DrawerShell title={detail.title} eyebrow="UNDERLYING ROLE SET" onClose={onClose}><p className="muted">{detail.description}</p><div className="result-count">{detail.opportunities.length} role{detail.opportunities.length === 1 ? '' : 's'} loaded</div><section className="detail-block"><OpportunityRows opportunities={detail.opportunities} onOpen={onOpen} /></section></DrawerShell>
+}
+
+function SourceDrawer({ detail, onOpen, onClose }: { detail: SourceDetail; onOpen: (role: Opportunity) => void; onClose: () => void }) {
+  const { source, runs, records, recordCount, opportunities } = detail
+  return <DrawerShell title={source.display_name} eyebrow="SOURCE OPERATIONS" onClose={onClose}>
+    <div className="decision-verdict"><span>{source.health}</span><strong>{source.source_family} source</strong></div>
+    <div className="trace-grid">
+      <Trace label="Last sync" value={source.last_sync_at ? `${relativeTime(source.last_sync_at)} · ${formatDate(source.last_sync_at)}` : 'Never'} />
+      <Trace label="Last success" value={source.last_success_at ? `${relativeTime(source.last_success_at)} · ${formatDate(source.last_success_at)}` : 'Never'} />
+      <Trace label="Canonical source records" value={String(recordCount)} />
+      <Trace label="Recent linked roles" value={String(opportunities.length)} />
+    </div>
+    {source.last_error && <div className="error-banner" role="alert">Latest source error: {source.last_error}</div>}
+    <DetailBlock title="Recent ingestion runs">{runs.length ? <div className="run-list">{runs.map((run) => <div className="run-row" key={run.id}><div><strong>{run.status}</strong><small>{formatDate(run.started_at)}{run.finished_at ? ` → ${formatDate(run.finished_at)}` : ' · still running'}</small></div><div className="run-counts"><span>{run.discovered_count} discovered</span><span>{run.new_count} new</span><span>{run.changed_count} changed</span><span>{run.duplicate_count} duplicate</span><span>{run.closed_count} closed</span><span>{run.error_count} errors</span></div>{run.error_text && <p className="source-error">{run.error_text}</p>}</div>)}</div> : <p className="muted">No ingestion runs recorded.</p>}</DetailBlock>
+    <DetailBlock title="Recent source records">{records.length ? <div>{records.map((record) => <div className="evidence-row" key={record.id}><div><strong>{record.external_id}</strong><small>{record.state} · seen {relativeTime(record.last_seen_at)}</small></div><a href={record.canonical_url} target="_blank" rel="noreferrer">Open source ↗</a></div>)}</div> : <p className="muted">No source records available.</p>}</DetailBlock>
+    <DetailBlock title="Linked canonical roles"><OpportunityRows opportunities={opportunities} onOpen={onOpen} /></DetailBlock>
+  </DrawerShell>
+}
+
+function CompanyDrawer({ detail, onOpen, onClose }: { detail: CompanyDetail; onOpen: (role: Opportunity) => void; onClose: () => void }) {
+  const { company, intelligence } = detail
+  const trajectory = intelligence.find((record) => record.capability === 'COMPANY_TRAJECTORY') ?? company.trajectory
+  const stakeholders = intelligence.flatMap(payloadStakeholders)
+  return <DrawerShell title={company.name} eyebrow="COMPANY AGGREGATION" onClose={onClose}>
+    <p className="muted">Reusable intelligence, stakeholders, surfaced mandates, and opportunity history for this company.</p>
+    {trajectory ? <DetailBlock title="Trajectory"><div className="intel-head"><strong>{payloadText(trajectory, 'current_health') ?? 'Current health not established.'}</strong><Confidence value={trajectory.confidence} /></div><p>{payloadText(trajectory, 'why_now_for_role') ?? 'Why-now conclusion not established.'}</p><InlineLists leftTitle="Strategic priorities" left={payloadList(trajectory, 'strategic_priorities')} rightTitle="Operating pressures" right={payloadList(trajectory, 'biggest_pain_points')} /><IntelligenceSources sources={trajectory.evidence ?? []} /><TraceLine record={trajectory} /></DetailBlock> : <p className="muted">Company trajectory has not been established.</p>}
+    <DetailBlock title="Stakeholders">{stakeholders.length ? stakeholders.map((person, index) => <div className="stakeholder-row" key={`${person.identity}-${index}`}><div><strong>{person.identity ?? 'Unknown person'}</strong><small>{person.title ?? 'Title unknown'} · {person.role_in_decision ?? 'role unknown'}</small></div><Verification value={person.verification_status ?? 'UNKNOWN'} /></div>) : <p className="muted">No defensible stakeholder identities established yet.</p>}</DetailBlock>
+    <DetailBlock title="Surfaced opportunities"><OpportunityRows opportunities={company.opportunities} onOpen={onOpen} /></DetailBlock>
+    <DetailBlock title="Opportunity history">{company.opportunities.map((role) => <button className="history-row interactive-row" key={role.id} onClick={() => onOpen(role)}><span><strong>{role.title}</strong><small>First seen {formatDate(role.first_seen_at)} · {role.screening_stage.replaceAll('_', ' ')}</small></span><small>Decision glass →</small></button>)}</DetailBlock>
+    {intelligence.length > 0 && <DetailBlock title="Reusable intelligence traces"><div className="intelligence-traces">{intelligence.map((record) => <div key={record.id}><strong>{record.capability.replaceAll('_', ' ')}</strong><small>{record.model_id ?? 'Deterministic'} · {record.reasoning_effort ?? 'n/a'} · {record.policy_version} · {record.capability_version}</small></div>)}</div></DetailBlock>}
+  </DrawerShell>
+}
+
+function ActivitySetDrawer({ events, onOpen, onClose }: { events: Activity[]; onOpen: (event: Activity) => void; onClose: () => void }) {
+  return <DrawerShell title="Needs Me" eyebrow="ACTION-REQUIRED ACTIVITY" onClose={onClose}>{events.length ? events.map((event) => <ActivityItem event={event} onOpen={onOpen} key={event.id} />) : <p className="muted">No action-required events are currently in the activity window.</p>}</DrawerShell>
+}
+
+function ActivityDrawer({ event, onClose }: { event: Activity; onClose: () => void }) {
+  const details = Object.entries(event.details ?? {})
+  return <DrawerShell title={event.message} eyebrow="ACTION CONTEXT" onClose={onClose}><div className="decision-verdict"><span>{event.severity.replaceAll('_', ' ')}</span><strong>{event.entity_type ? `${event.entity_type} · ${event.entity_id ?? 'reference unavailable'}` : 'No linked entity'}</strong></div><DetailBlock title="Blocking reason and recorded context">{details.length ? <div className="trace-grid">{details.map(([key, value]) => <Trace key={key} label={key.replaceAll('_', ' ')} value={formatValue(value)} />)}</div> : <p className="muted">No additional action context was persisted for this event.</p>}</DetailBlock><small className="muted">Recorded {formatDate(event.created_at)}</small></DrawerShell>
+}
+
+function TraceLine({ record }: { record: IntelligenceRecord }) { return <div className="trace-line">{record.model_id ?? 'Deterministic'} · {record.reasoning_effort ?? 'n/a'} · policy {record.policy_version} · capability {record.capability_version} · trace {record.trace_id?.slice(0, 12) ?? 'n/a'}</div> }
+
+function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    closeRef.current?.focus()
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      previousFocus?.focus()
+    }
   }, [onClose])
 
-  const { opportunity, decision, modelRun, intelligence } = detail
+  const { opportunity, decision, decisionHistory, modelRun, intelligence } = detail
   const evidence = decision?.evidence ?? {}
   const sources = evidence.sources ?? []
-  const intel = new Map(intelligence.map((record) => [record.capability, record]))
+  const intel = new Map(latestByCapability(intelligence.filter((record) => record.status === 'COMPLETED')).map((record) => [record.capability, record]))
   const core = intel.get('CORE_X')
   const native = intel.get('NATIVE_CANDIDATE')
   const pressure = intel.get('COMMERCIAL_PRESSURE')
@@ -470,7 +720,7 @@ function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClos
   return (
     <div className="drawer-backdrop" onMouseDown={onClose}>
       <section className="decision-drawer" role="dialog" aria-modal="true" aria-labelledby="decision-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="drawer-head"><div><div className="eyebrow">DECISION GLASS</div><h2 id="decision-title">{opportunity.title}</h2><p className="muted">{opportunity.company?.display_name}{opportunity.location ? ` · ${opportunity.location}` : ''}</p></div><button className="close" aria-label="Close decision details" onClick={onClose}>×</button></div>
+        <div className="drawer-head"><div><div className="eyebrow">DECISION GLASS</div><h2 id="decision-title">{opportunity.title}</h2><p className="muted">{opportunity.company?.display_name}{opportunity.location ? ` · ${opportunity.location}` : ''}</p>{postingUrl(opportunity) ? <a className="posting-link primary-posting" href={postingUrl(opportunity)} target="_blank" rel="noreferrer">Open canonical posting ↗</a> : <span className="source-unavailable">Source URL unavailable</span>}</div><button ref={closeRef} className="close" aria-label="Close decision details" onClick={onClose}>×</button></div>
 
         {core && <section className="intelligence-verdict">
           <span>CORE X</span>
@@ -552,9 +802,19 @@ function DecisionDrawer({ detail, onClose }: { detail: OpportunityDetail; onClos
           </div>
         </DetailBlock>}
 
+        <DetailBlock title="Changed / stale state">
+          <div className="trace-grid">
+            <Trace label="Current role state" value={opportunity.screening_stage.replaceAll('_', ' ')} />
+            <Trace label="First seen" value={formatDate(opportunity.first_seen_at)} />
+            <Trace label="Decision versions" value={String(decisionHistory.length)} />
+            <Trace label="Supersedes" value={decision?.supersedes_id?.slice(0, 12) ?? 'No prior decision linked'} />
+          </div>
+          {decisionHistory.length > 1 && <div className="history-list">{decisionHistory.map((version) => <div className="trace-line" key={version.id}>{formatDate(version.created_at)} · {version.stage.replaceAll('_', ' ')} · {version.outcome.replaceAll('_', ' ')} · {version.policy_version ?? 'policy unknown'}</div>)}</div>}
+        </DetailBlock>
+
         {intelligence.length > 0 && <DetailBlock title="Intelligence traces">
           <div className="intelligence-traces">{intelligence.map((record) => (
-            <div key={record.id}><strong>{record.capability.replaceAll('_', ' ')}</strong><small>{record.model_id ?? 'Deterministic'} · {record.reasoning_effort ?? 'n/a'} · {record.capability_version} · trace {record.trace_id?.slice(0, 10) ?? 'n/a'}</small></div>
+            <div key={record.id}><strong>{record.capability.replaceAll('_', ' ')} · {record.status.replaceAll('_', ' ')}</strong><small>{formatDate(record.updated_at)} · {record.model_id ?? 'Deterministic'} · {record.reasoning_effort ?? 'n/a'} · {record.capability_version} · policy {record.policy_version} · trace {record.trace_id?.slice(0, 10) ?? 'n/a'}{record.supersedes_id ? ` · supersedes ${record.supersedes_id.slice(0, 10)}` : ''}</small></div>
           ))}</div>
         </DetailBlock>}
       </section>
@@ -607,7 +867,7 @@ function Verification({ value }: { value: string }) {
 
 function latestByCapability(records: IntelligenceRecord[]): IntelligenceRecord[] {
   const seen = new Set<string>()
-  return records
+  return [...records]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .filter((record) => {
       if (seen.has(record.capability)) return false
@@ -635,19 +895,21 @@ function DetailBlock({ title, children }: { title: string; children: React.React
 function DetailList({ title, items, empty = 'None recorded.' }: { title: string; items: string[]; empty?: string }) { return <DetailBlock title={title}>{items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="muted">{empty}</p>}</DetailBlock> }
 function Trace({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div> }
 
-function ActivityRail({ activity }: { activity: Activity[] }) {
+function ActivityRail({ activity, onOpen }: { activity: Activity[]; onOpen: (event: Activity) => void }) {
   const needsMe = activity.filter((event) => event.severity === 'ACTION_REQUIRED')
   const operational = activity.filter((event) => event.severity !== 'ACTION_REQUIRED')
   return <aside aria-label="Activity and Needs Me">
     <div className="panel-title"><h3>Activity / Needs Me</h3><span>{needsMe.length ? `${needsMe.length} action required` : 'system healthy'}</span></div>
-    {needsMe.length > 0 && <section className="needs-me-list"><div className="eyebrow">NEEDS ME</div>{needsMe.map((event) => <ActivityItem event={event} key={event.id} />)}</section>}
-    {operational.length === 0 && needsMe.length === 0 ? <p className="muted">Waiting for first autonomous run.</p> : operational.map((event) => <ActivityItem event={event} key={event.id} />)}
+    {needsMe.length > 0 && <section className="needs-me-list"><div className="eyebrow">NEEDS ME</div>{needsMe.map((event) => <ActivityItem event={event} onOpen={onOpen} key={event.id} />)}</section>}
+    {operational.length === 0 && needsMe.length === 0 ? <p className="muted">Waiting for first autonomous run.</p> : operational.map((event) => <ActivityItem event={event} onOpen={onOpen} key={event.id} />)}
   </aside>
 }
 
-function ActivityItem({ event }: { event: Activity }) {
+function ActivityItem({ event, onOpen }: { event: Activity; onOpen: (event: Activity) => void }) {
   const prominent = ['ATTENTION', 'ACTION_REQUIRED', 'ERROR'].includes(event.severity)
-  return <div className={`activity-item ${prominent ? 'prominent' : ''}`}><span className={`activity-mark ${event.severity.toLowerCase()}`} /><div><strong>{event.message}</strong><small>{relativeTime(event.created_at)} · {event.severity.replace('_', ' ')}</small></div></div>
+  const interactive = Boolean(event.entity_type && event.entity_id) || event.severity === 'ACTION_REQUIRED'
+  const content = <><span className={`activity-mark ${event.severity.toLowerCase()}`} /><div><strong>{event.message}</strong><small>{relativeTime(event.created_at)} · {event.severity.replace('_', ' ')}{interactive ? ' · Inspect →' : ''}</small></div></>
+  return interactive ? <button className={`activity-item activity-button ${prominent ? 'prominent' : ''}`} onClick={() => void onOpen(event)}>{content}</button> : <div className={`activity-item ${prominent ? 'prominent' : ''}`}>{content}</div>
 }
 
 function relativeTime(value: string) {
@@ -660,7 +922,24 @@ function relativeTime(value: string) {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-function Metric({ label, value }: { label: string; value: number }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div> }
-function StatRow({ label, value }: { label: string; value: number }) { return <div className="stat-row"><span>{label}</span><strong>{value}</strong></div> }
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value === null || value === undefined) return 'Not recorded'
+  return JSON.stringify(value)
+}
+
+function postingUrl(opportunity: Opportunity): string | undefined {
+  const sources = opportunity.opportunity_sources ?? []
+  return sources.find((link) => link.is_primary && link.source_record?.canonical_url)?.source_record?.canonical_url
+    ?? sources.find((link) => link.source_record?.canonical_url)?.source_record?.canonical_url
+}
+
+function Metric({ label, value, onClick }: { label: string; value: number; onClick: () => void }) { return <button className="metric interactive-card" onClick={onClick}><span>{label} · Inspect →</span><strong>{value}</strong></button> }
+function StatRow({ label, value, onClick }: { label: string; value: number; onClick: () => void }) { return <button className="stat-row interactive-row" onClick={onClick}><span>{label}</span><span className="stat-action"><strong>{value}</strong><small>Inspect →</small></span></button> }
 
 export default App
