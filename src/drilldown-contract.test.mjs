@@ -11,10 +11,10 @@ test('every required cockpit surface is wired to an in-context drill-down', () =
     "onDrill('monitor'",
     "onDrill('gray'",
     "['discovered', 'Signals discovered'",
-    "['canonical', 'Canonical roles'",
-    "['eligible', 'Executive eligible'",
-    "['relevant', 'Relevant'",
-    "['priority', 'Priority'",
+    "['canonical', 'Canonicalized roles'",
+    "['awaiting_triage', 'Awaiting mandate triage'",
+    "['relevant', 'Surfaced · new ≤24h'",
+    "['priority', 'Tier 1/2 · new ≤24h'",
     "onDrill('clear_no'",
     "onDrill('needs_data'",
     'onSource(source)',
@@ -48,4 +48,14 @@ test('intake distinguishes market coverage from source health and exposes probe 
   assert.match(app, /Coverage measures where we look; health measures whether a configured connector ran/)
   assert.match(app, /Independent recall probes/)
   assert.match(app, /Open probe source ↗/)
+})
+
+test('semantic truth and degraded mode never manufacture decisions', () => {
+  assert.doesNotMatch(app, /priority_class \?\? 'NEEDS_DATA'/)
+  assert.match(app, /AWAITING TRIAGE/)
+  assert.match(app, /AWAITING QUALIFICATION/)
+  assert.match(app, /DEGRADED · PROCESSING INCOMPLETE/)
+  assert.match(app, /Recommendation totals cover processed records only/)
+  assert.match(app, /\.eq\('visibility', 'SURFACED'\)/)
+  assert.match(app, /\.eq\('screening_stage', 'ELIGIBLE'\)/)
 })

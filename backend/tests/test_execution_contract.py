@@ -23,7 +23,7 @@ def test_execution_contract_is_bound_and_machine_readable() -> None:
     expected_stops = {
         "BLOCKED",
         "APPROVAL_REQUIRED",
-        "HUMAN_ACTION_REQUIRED",
+        "HUMAN ACTION REQUIRED",
         "DONE",
     }
     assert set(policy["stop_conditions"]) == expected_stops
@@ -123,7 +123,7 @@ def test_routine_merge_and_deploy_do_not_require_user_approval() -> None:
     assert "**Production is not synonymous with destructive.**" in agents
     assert "A PR is an internal unit of work, not the project deliverable." in agents
     assert "The word **production** does not automatically imply an approval boundary." in execution_model
-    assert 'do NOT ask the user to approve a squash merge or ordinary Pages deployment merely because it is production' in handoff
+    assert 'production is not by itself an approval boundary' in handoff
 
 
 def test_reserved_approval_boundaries_do_not_drift() -> None:
@@ -183,7 +183,7 @@ def test_persistent_runs_reiterate_without_weakening_product_objective() -> None
     assert reiteration["forbid_local_optimization_at_product_objective_expense"] is True
 
     assert "POTENCY-PRESERVING REITERATION IS MANDATORY" in handoff
-    assert "fixing P0-A and P0-B is not the end of the run" in handoff
+    assert "completing one defect, PR, deployment, or P0 is not the end of the run" in handoff
     assert "The runner MUST NOT make progress look better by weakening the product." in iteration
     assert "All prior PASS decisions are falsifiable." in iteration
     assert "TASK INCOMPLETE" in iteration and "=> REITERATE" in iteration

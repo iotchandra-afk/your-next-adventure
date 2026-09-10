@@ -11,6 +11,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
+from .runtime_capacity import RuntimeCapacity
+
 
 MODEL_PRICES_PER_MILLION = {
     "gpt-5.6-sol": {"input": 4.0, "output": 20.0},
@@ -25,6 +27,7 @@ ASTRA_WEB_FALLBACK_COOLDOWN_SECONDS = 180.0
 _INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
 _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)", re.IGNORECASE)
+_CAPACITY_AUTO = object()
 
 
 @dataclass(frozen=True)
@@ -52,7 +55,7 @@ ROUTES = {
 
 
 class OpenAIResponses:
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, capacity: RuntimeCapacity | None | object = _CAPACITY_AUTO):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is required")
@@ -64,6 +67,7 @@ class OpenAIResponses:
             "Accept": "application/json",
         })
         self._not_before_by_model: dict[str, float] = {}
+        self.capacity = RuntimeCapacity.from_environment() if capacity is _CAPACITY_AUTO else capacity
 
     def assert_model_available(self, model_id: str) -> dict[str, Any]:
         response = self.http.get(f"{self.base}/models/{model_id}", timeout=30)
@@ -150,32 +154,52 @@ class OpenAIResponses:
         absent. A 429 retries the exact same request/model; no quality downgrade occurs.
         """
         model_id = str(payload.get("model") or "")
+        if self.capacity:
+            self.capacity.acquire(model_id)
+        succeeded = False
         last_network_error: Exception | None = None
-        for attempt in range(MAX_RESPONSE_ATTEMPTS):
-            self._wait_for_model(model_id)
-            try:
-                response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                last_network_error = exc
-                if attempt >= MAX_RESPONSE_ATTEMPTS - 1:
-                    raise
-                self._arm_model_delay(model_id, _fallback_retry_delay(attempt))
-                continue
+        try:
+            for attempt in range(MAX_RESPONSE_ATTEMPTS):
+                self._wait_for_model(model_id)
+                if self.capacity:
+                    # Renew before every potentially long provider call. A request timeout
+                    # is shorter than the lease, preventing concurrent budget ownership.
+                    self.capacity.acquire(model_id)
+                try:
+                    response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
+                except (requests.Timeout, requests.ConnectionError) as exc:
+                    last_network_error = exc
+                    if attempt >= MAX_RESPONSE_ATTEMPTS - 1:
+                        raise
+                    self._arm_model_delay(model_id, _fallback_retry_delay(attempt))
+                    continue
 
-            if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
-                self._arm_model_delay(model_id, _response_retry_delay(response, attempt))
-                continue
+                if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
+                    delay = _response_retry_delay(response, attempt)
+                    if response.status_code == 429 and self.capacity:
+                        self.capacity.throttle(model_id, delay)
+                    self._arm_model_delay(model_id, delay)
+                    continue
 
-            response.raise_for_status()
-            body = response.json()
-            if body.get("status") != "completed":
-                raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
-            self._observe_success_rate_window(model_id, payload, response, body)
-            return body
+                response.raise_for_status()
+                body = response.json()
+                if body.get("status") != "completed":
+                    raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
+                self._observe_success_rate_window(model_id, payload, response, body)
+                succeeded = True
+                return body
 
-        if last_network_error:
-            raise last_network_error
-        raise RuntimeError("OpenAI response retry budget exhausted")
+            if last_network_error:
+                raise last_network_error
+            raise RuntimeError("OpenAI response retry budget exhausted")
+        finally:
+            if self.capacity:
+                try:
+                    self.capacity.release(model_id, succeeded)
+                except requests.RequestException:
+                    # A lost release cannot corrupt business state; the durable TTL
+                    # expires the lease and the next worker performs stale recovery.
+                    pass
 
     def _arm_model_delay(self, model_id: str, seconds: float) -> None:
         if not model_id or seconds <= 0:

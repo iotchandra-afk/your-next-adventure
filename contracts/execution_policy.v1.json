@@ -22,7 +22,7 @@
   "stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN_ACTION_REQUIRED",
+    "HUMAN ACTION REQUIRED",
     "DONE"
   ],
   "approval_boundaries": [
