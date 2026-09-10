@@ -49,6 +49,20 @@
     "persistent_runner_must_continue_across_internal_engineering_units": true,
     "persistent_runner_must_reiterate_across_material_slices": true
   },
+  "control_plane_write_policy": {
+    "github_repository_native_writes_require_outbound_communication_approval": false,
+    "pr_creation_requires_approval": false,
+    "pr_title_or_body_update_requires_approval": false,
+    "issue_creation_or_update_requires_approval": false,
+    "issue_or_pr_control_plane_comment_requires_approval": false,
+    "checkpoint_evidence_write_requires_approval": false,
+    "constraints": [
+      "WITHIN_ALREADY_AUTHORIZED_SCOPE",
+      "NO_PRIVATE_CANDIDATE_DATA_OR_SECRETS_IN_PUBLIC_REPO",
+      "NO_OTHER_RESERVED_APPROVAL_BOUNDARY_CROSSED"
+    ],
+    "outbound_communication_boundary_scope": "HUMAN_FACING_COMMUNICATION_TO_PERSON_OR_EXTERNAL_AUDIENCE_OUTSIDE_PROJECT_CONTROL_PLANE"
+  },
   "merge_deploy_policy": {
     "routine_reversible_merge_to_main_requires_approval": false,
     "routine_reversible_production_deployment_requires_approval": false,
@@ -66,7 +80,7 @@
   "allowed_unsolicited_stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN_ACTION_REQUIRED",
+    "HUMAN_ACTION REQUIRED",
     "DONE"
   ],
   "checkpoint_requires_user_acknowledgement": false,
