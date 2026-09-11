@@ -23,7 +23,7 @@ def test_execution_contract_is_bound_and_machine_readable() -> None:
     expected_stops = {
         "BLOCKED",
         "APPROVAL_REQUIRED",
-        "HUMAN ACTION REQUIRED",
+        "HUMAN_ACTION_REQUIRED",
         "DONE",
     }
     assert set(policy["stop_conditions"]) == expected_stops
@@ -86,6 +86,7 @@ def test_persistent_execution_surface_truth_is_explicit() -> None:
 def test_routine_merge_and_deploy_do_not_require_user_approval() -> None:
     manifest = json.loads((ROOT / "SPEC_MANIFEST.json").read_text(encoding="utf-8"))
     policy = json.loads((ROOT / "contracts" / "execution_policy.v1.json").read_text(encoding="utf-8"))
+    boundary = json.loads((ROOT / "contracts" / "deployment_boundary.v1.json").read_text(encoding="utf-8"))
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     execution_model = (ROOT / "docs" / "EXECUTION_MODEL.md").read_text(encoding="utf-8")
     handoff = (ROOT / "docs" / "WORK_HANDOFF.md").read_text(encoding="utf-8")
@@ -94,7 +95,9 @@ def test_routine_merge_and_deploy_do_not_require_user_approval() -> None:
     assert merge["production_label_alone_requires_approval"] is False
     assert merge["routine_reversible_merge_to_main_requires_approval"] is False
     assert merge["routine_reversible_deployment_requires_approval"] is False
-    assert merge["github_pages_deployment_requires_approval"] is False
+    assert merge["github_pages_deployment_forbidden"] is True
+    assert merge["authorized_runtime"] == "REPLIT"
+    assert merge["deployment_target_change_requires_explicit_user_approval"] is True
     assert merge["additive_non_destructive_migration_requires_approval"] is False
     assert merge["pr_ready_is_completion"] is False
     assert merge["ci_passed_is_completion"] is False
@@ -103,27 +106,32 @@ def test_routine_merge_and_deploy_do_not_require_user_approval() -> None:
     manifest_merge = manifest["merge_deploy_policy"]
     assert manifest_merge["routine_reversible_merge_to_main_requires_approval"] is False
     assert manifest_merge["routine_reversible_production_deployment_requires_approval"] is False
-    assert manifest_merge["github_pages_deployment_requires_approval"] is False
+    assert manifest_merge["github_pages_deployment_forbidden"] is True
+    assert manifest_merge["authorized_runtime"] == "REPLIT"
+    assert manifest_merge["deployment_target_change_requires_explicit_user_approval"] is True
     assert manifest_merge["production_label_alone_is_approval_boundary"] is False
     assert manifest_merge["destructive_or_materially_irreversible_production_operation_requires_approval"] is True
     assert manifest_merge["pr_ready_is_done"] is False
     assert manifest_merge["ci_passed_is_done"] is False
     assert manifest_merge["deployment_ready_is_done"] is False
 
+    assert boundary["authorized_runtime"] == "REPLIT"
+    assert "GITHUB_PAGES" in boundary["forbidden_deployment_surfaces"]
+
     routine = set(policy["routine_autonomous_actions"])
     for required in {
         "UPDATE_OR_REBASE_IMPLEMENTATION_BRANCH",
         "MERGE_IMPLEMENTATION_PR_TO_MAIN",
         "SQUASH_MERGE_IMPLEMENTATION_PR_TO_MAIN",
-        "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN",
         "VERIFY_ROUTINE_DEPLOYMENT",
     }:
         assert required in routine
+    assert "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN" not in routine
 
     assert "**Production is not synonymous with destructive.**" in agents
     assert "A PR is an internal unit of work, not the project deliverable." in agents
     assert "The word **production** does not automatically imply an approval boundary." in execution_model
-    assert 'production is not by itself an approval boundary' in handoff
+    assert "production is not by itself an approval boundary" in handoff
 
 
 def test_reserved_approval_boundaries_do_not_drift() -> None:
