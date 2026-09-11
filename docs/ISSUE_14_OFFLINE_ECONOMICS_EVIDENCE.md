@@ -39,6 +39,7 @@ Downstream Astra qualification is not counted as the Sol screening gate: at the 
 ## Runtime and negative proof
 
 - Canonical repair appended new deterministic decisions and reconciled 1,174 active unprocessed roles: 1,114 clear-no and 60 residual Sol candidates. A second execution changed 0 rows.
+- Post-merge verification falsified the first worker-query PASS: the retired reason-code filter selected 0 of those 60 canonical `ELIGIBLE` roles. The repair removed that obsolete filter and added a query-contract regression; the worker now keys on canonical stage.
 - Zero-paid state remains closed: paid runtime, Sol, and Astra are all disabled; cycle/day ceilings remain $2.
 - Two runtime reservation attempts (one Sol, one Astra) were denied before creating a reservation. No provider request was made.
 - The partial unique model-run identity admitted one synthetic claim and rejected the duplicate claim; the exact synthetic row was then removed.
