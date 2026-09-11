@@ -167,7 +167,21 @@ def test_non_transient_400_fails_without_retry(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = OpenAIResponses(api_key="test", capacity=None)
+    class Capacity:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def acquire(self, _model_id: str) -> None:
+            return None
+
+        def throttle(self, *args) -> None:
+            self.calls.append(args)
+
+        def release(self, _model_id: str, _succeeded: bool) -> None:
+            return None
+
+    capacity = Capacity()
+    client = OpenAIResponses(api_key="test", capacity=capacity)
     fake = _FakeSession([_FakeResponse(429, body={"error": {
         "type": "insufficient_quota",
         "code": "insufficient_quota",
@@ -180,6 +194,7 @@ def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.Monkey
         client._post({"model": "gpt-5.6-sol"})
 
     assert "sensitive provider prose" not in str(exc.value)
+    assert capacity.calls == [("gpt-5.6-sol", 30.0, "insufficient_quota", "insufficient_quota")]
     assert fake.calls == 1
     assert sleeps == []
 

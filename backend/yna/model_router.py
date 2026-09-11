@@ -181,9 +181,9 @@ class OpenAIResponses:
 
                 if response.status_code == 429:
                     delay = _response_retry_delay(response, attempt)
-                    if self.capacity:
-                        self.capacity.throttle(model_id, delay)
                     error = _provider_error(response, model_id, delay)
+                    if self.capacity:
+                        self.capacity.throttle(model_id, delay, error["type"], error["code"])
                     if error["code"] in NON_RETRYABLE_CAPACITY_CODES or attempt >= MAX_RESPONSE_ATTEMPTS - 1:
                         raise ProviderBackpressure(_provider_error_message(error))
                     self._arm_model_delay(model_id, delay)

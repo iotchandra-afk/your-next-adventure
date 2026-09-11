@@ -42,9 +42,11 @@ def test_capacity_lease_acquire_throttle_release_positive_path():
     db = DB([True, True, True])
     capacity = RuntimeCapacity(db, wait_seconds=0)
     capacity.acquire("gpt-5.6-sol")
-    capacity.throttle("gpt-5.6-sol", 12)
+    capacity.throttle("gpt-5.6-sol", 12, "rate_limit_error", "rate_limit_exceeded")
     capacity.release("gpt-5.6-sol", True)
-    assert [name for name, _ in db.session.calls] == ["acquire_model_lease", "throttle_model_capacity", "release_model_lease"]
+    assert [name for name, _ in db.session.calls] == ["acquire_model_lease", "throttle_model_capacity_v2", "release_model_lease"]
+    assert db.session.calls[1][1]["p_error_type"] == "rate_limit_error"
+    assert db.session.calls[1][1]["p_error_code"] == "rate_limit_exceeded"
     assert db.session.calls[-1][1]["p_succeeded"] is True
 
 
@@ -93,6 +95,22 @@ def test_capacity_migration_is_caller_scoped_and_recovers_stale_runs():
     assert "stale_running_recovered" in sql
     assert "from public, anon, authenticated" in sql
     assert "grant execute" in sql and "to service_role" in sql
+
+
+def test_sustained_throttle_migration_opens_and_resets_circuit_safely():
+    sql = (ROOT / "db" / "migrations" / "20260911104755_sustained_model_circuit_breaker.sql").read_text(encoding="utf-8").lower()
+    assert "add column if not exists consecutive_throttles" in sql
+    assert "create or replace function public.throttle_model_capacity_v2" in sql
+    assert "insufficient_quota" in sql and "billing_hard_limit_reached" in sql
+    assert "interval '6 hours'" in sql
+    assert "consecutive_throttles = case when p_succeeded then 0" in sql
+    assert "blocked_until = case when p_succeeded then null" in sql
+    assert "security invoker" in sql
+    assert "security definer" not in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+    assert "delete from public.model_capacity" not in sql
+    assert "drop table" not in sql
 
 
 def test_triage_stops_claiming_backlog_after_first_failed_batch(monkeypatch):

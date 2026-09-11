@@ -47,8 +47,14 @@ class RuntimeCapacity:
                 raise CapacityUnavailable(f"Shared capacity unavailable for {model_id}; work retained for retry.")
             time.sleep(5)
 
-    def throttle(self, model_id: str, delay_seconds: float) -> None:
-        self._rpc("throttle_model_capacity", {"p_model_id": model_id, "p_holder": self.holder, "p_delay_seconds": max(5, min(int(delay_seconds + 1), 900))})
+    def throttle(self, model_id: str, delay_seconds: float, error_type: str = "unknown", error_code: str = "unknown") -> None:
+        self._rpc("throttle_model_capacity_v2", {
+            "p_model_id": model_id,
+            "p_holder": self.holder,
+            "p_delay_seconds": max(5, min(int(delay_seconds + 1), 900)),
+            "p_error_type": error_type[:120],
+            "p_error_code": error_code[:120],
+        })
 
     def release(self, model_id: str, succeeded: bool) -> None:
         self._rpc("release_model_lease", {"p_model_id": model_id, "p_holder": self.holder, "p_succeeded": succeeded})
