@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "project": "YourNextAdventure",
+  "status": "NORMATIVE",
+  "specific_policy_precedence": "This deployment boundary supersedes any generic merge/deploy language elsewhere in the repository when the two conflict.",
+  "source_control": {
+    "repository": "iotchandra-afk/your-next-adventure",
+    "github_role": "SOURCE_AND_CONTROL_PLANE_ONLY"
+  },
+  "forbidden_deployment_surfaces": [
+    "GITHUB_PAGES",
+    "chandrakanojia.com",
+    "www.chandrakanojia.com",
+    "iotchandra-afk.github.io",
+    "iotchandra-afk/iotchandra-afk.github.io"
+  ],
+  "forbidden_repository_artifacts": [
+    "CNAME",
+    "actions/configure-pages",
+    "actions/upload-pages-artifact",
+    "actions/deploy-pages",
+    "pages: write",
+    "github-pages deployment environment"
+  ],
+  "authorized_runtime": "REPLIT",
+  "personal_site_isolation_required": true,
+  "personal_site_repository_must_not_be_modified_for_yournextadventure": true,
+  "personal_site_dns_must_not_be_modified_for_yournextadventure": true,
+  "deployment_target_change_requires_explicit_user_approval": true,
+  "fail_closed_on_unknown_deployment_target": true
+}
