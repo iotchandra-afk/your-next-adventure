@@ -13,6 +13,7 @@ from yna.intelligence import (
 )
 from yna.model_router import (
     OpenAIResponses,
+    ProviderBackpressure,
     _parse_duration_seconds,
     _retry_after_ms_seconds,
     clean_structured_result,
@@ -161,6 +162,24 @@ def test_non_transient_400_fails_without_retry(monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(requests.HTTPError):
         client._post({"model": "gpt-6-astra"})
 
+    assert fake.calls == 1
+    assert sleeps == []
+
+
+def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = OpenAIResponses(api_key="test", capacity=None)
+    fake = _FakeSession([_FakeResponse(429, body={"error": {
+        "type": "insufficient_quota",
+        "code": "insufficient_quota",
+        "message": "sensitive provider prose is deliberately not persisted",
+    }}, headers={"retry-after": "30s"})])
+    client.http = fake  # type: ignore[assignment]
+    sleeps, _ = _fake_clock(monkeypatch)
+
+    with pytest.raises(ProviderBackpressure, match=r"status=429.*type=insufficient_quota.*code=insufficient_quota.*retry_after_seconds=30.0") as exc:
+        client._post({"model": "gpt-5.6-sol"})
+
+    assert "sensitive provider prose" not in str(exc.value)
     assert fake.calls == 1
     assert sleeps == []
 
