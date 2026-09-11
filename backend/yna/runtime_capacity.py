@@ -37,7 +37,20 @@ class RuntimeCapacity:
     def recover_stale_runs(self) -> int:
         return int(self._rpc("recover_stale_model_runs", {"p_timeout_minutes": 35}) or 0)
 
+    def spend_allowed(self, model_id: str) -> bool:
+        """Return canonical spend authority before any paid provider request.
+
+        Provider credit is not spend authority. The database kill switch and
+        bounded budget must both permit the model before a lease can be claimed.
+        """
+        return self._rpc("model_spend_allowed", {"p_model_id": model_id}) is True
+
     def acquire(self, model_id: str) -> None:
+        if not self.spend_allowed(model_id):
+            raise CapacityUnavailable(
+                f"Paid model runtime disabled or budget unavailable for {model_id}; work retained without provider spend."
+            )
+
         deadline = time.monotonic() + self.wait_seconds
         while True:
             acquired = self._rpc("acquire_model_lease", {"p_model_id": model_id, "p_holder": self.holder, "p_ttl_seconds": self.ttl_seconds})
