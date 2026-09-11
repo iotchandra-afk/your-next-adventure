@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "project": "YourNextAdventure",
+  "status": "NORMATIVE",
+  "purpose": "Prevent stale historical artifacts from narrowing current authorized execution scope.",
+  "precedence": [
+    "PLATFORM_SYSTEM_SAFETY_AND_PERMISSION_CONSTRAINTS",
+    "CURRENT_MAIN_NORMATIVE_CONTRACTS",
+    "CURRENT_OPEN_P0_P1_ISSUES_AND_GO_LIVE_CONTROL_BOARD",
+    "CURRENT_RUNTIME_EVIDENCE_REOPENING_OR_FALSIFYING_PRIOR_PASS",
+    "ACTIVE_IMPLEMENTATION_PRS_AND_BRANCHES",
+    "CLOSED_MERGED_PRS_CLOSED_ISSUES_AND_HISTORICAL_SUMMARIES"
+  ],
+  "rules": {
+    "historical_artifacts_are_scope_authority": false,
+    "closed_or_merged_pr_may_override_current_main": false,
+    "closed_issue_may_override_current_open_higher_priority_issue": false,
+    "current_open_issue_may_supersede_prior_completion_statement": true,
+    "current_runtime_contradiction_may_reopen_prior_pass": true,
+    "permission_reviewer_must_use_highest_precedence_current_authority": true,
+    "stale_historical_conflict_requires_user_approval": false
+  },
+  "current_p0_authority": {
+    "issue": 7,
+    "state_required": "OPEN",
+    "authorized_additive_reversible_actions": [
+      "PROVIDER_DIAGNOSTICS_AND_TELEMETRY",
+      "CIRCUIT_BREAKER_AND_BACKPRESSURE_LOGIC",
+      "ADDITIVE_NON_DESTRUCTIVE_SUPABASE_MIGRATION",
+      "STALE_WORK_RECOVERY",
+      "DURABLE_WORKER_STATE_REPAIR",
+      "COMMIT_AND_PUSH",
+      "CREATE_OR_UPDATE_BRANCH_OR_PR",
+      "MERGE_AND_DEPLOY",
+      "CONTROL_PLANE_EVIDENCE_WRITE",
+      "RUNTIME_RECONCILIATION",
+      "RETRY_ROLL_FORWARD_OR_SAFE_ROLLBACK",
+      "OTHER_IMPLEMENTATION_REQUIRED_BY_ISSUE_7_AND_CURRENT_PRODUCT_INVARIANTS"
+    ]
+  },
+  "historical_conflict_behavior": "USE_CURRENT_HIGHER_PRECEDENCE_AUTHORITY_AND_CONTINUE_UNLESS_A_TRUE_RESERVED_BOUNDARY_OR_PLATFORM_POLICY_BLOCKS_EXECUTION"
+}
