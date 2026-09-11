@@ -5,6 +5,7 @@
   "implementation_authority_source": "SPEC_MANIFEST.json",
   "scope_authority_contract": "contracts/scope_authority.v1.json",
   "deployment_boundary_contract": "contracts/deployment_boundary.v1.json",
+  "model_economics_contract": "contracts/model_economics.v1.json",
   "default_action": "CONTINUE",
   "communication_default": "SILENT",
   "decision_rule": "if task_incomplete and no_blocker and no_approval_boundary and no_human_action and execution_surface_active then CONTINUE",
@@ -52,7 +53,7 @@
   "stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN ACTION REQUIRED",
+    "HUMAN_ACTION_REQUIRED",
     "DONE"
   ],
   "approval_boundaries": [
@@ -156,6 +157,31 @@
       "POST_DEPLOY_RUNTIME_RECONCILIATION"
     ]
   },
+  "model_economics_policy": {
+    "contract": "contracts/model_economics.v1.json",
+    "document": "docs/MODEL_ECONOMICS.md",
+    "current_p0_issue": 14,
+    "current_mode": "ZERO_PAID_RUNTIME",
+    "paid_runtime_enabled": false,
+    "provider_credit_is_spend_authority": false,
+    "scheduled_paid_model_workflows_enabled": false,
+    "request_restore_provider_credit_while_zero_paid_runtime": false,
+    "offline_engineering_must_continue": true,
+    "deterministic_first": true,
+    "target_max_sol_triage_fraction": 0.10,
+    "target_max_astra_fraction": 0.02,
+    "deep_intelligence_requires_qualified_opportunity_or_active_pursuit": true,
+    "reuse_unchanged_successful_paid_reasoning": true,
+    "validation_cycle_budget_usd": 2.0,
+    "validation_daily_budget_usd": 2.0,
+    "representative_universe_min_roles": 1000,
+    "max_paid_screening_cycle_usd": 2.0,
+    "paid_runtime_resume_requires_explicit_owner_approval": true,
+    "budget_increase_requires_explicit_owner_approval": true,
+    "atomic_budget_reservation_required_before_bounded_paid_mode": true,
+    "full_production_backlog_may_be_used_as_development_eval": false,
+    "on_zero_paid_runtime": "CONTINUE_OFFLINE_COST_REDESIGN_WITHOUT_PROVIDER_CALLS"
+  },
   "iteration_policy": {
     "contract": "docs/ITERATION_CONTRACT.md",
     "enabled_for_persistent_runs": true,
@@ -196,6 +222,11 @@
     "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION",
     "PROVIDER_DIAGNOSTICS_AND_TELEMETRY",
     "CIRCUIT_BREAKER_AND_BACKPRESSURE_LOGIC",
+    "OFFLINE_MODEL_COST_REPLAY",
+    "HISTORICAL_LABEL_CORPUS_ANALYSIS",
+    "DETERMINISTIC_PRETRIAGE_ENGINEERING",
+    "PAID_RESULT_REUSE_ENGINEERING",
+    "ATOMIC_BUDGET_RESERVATION_ENGINEERING",
     "BUILD_CHANGE_IMPACT_MAP",
     "VERIFY_AFFECTED_PRODUCT_INVARIANTS",
     "RUN_NEGATIVE_ASSERTIONS",
@@ -228,6 +259,7 @@
     "INVARIANT_CHECK_STATUS",
     "RUNTIME_RECONCILIATION_STATUS",
     "STALE_HISTORICAL_SCOPE_CONFLICT",
+    "REQUEST_TO_RESTORE_PROVIDER_CREDIT_WHILE_ZERO_PAID_RUNTIME",
     "REQUEST_TO_PROCEED",
     "REQUEST_TO_RECONFIRM_EXISTING_AUTHORITY"
   ],
@@ -263,6 +295,8 @@
     "invariant_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_CONTINUE",
     "post_deploy_reconciliation_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_REVERIFY",
     "stale_historical_scope_conflict": "IGNORE_LOWER_PRECEDENCE_ARTIFACT_AND_CONTINUE",
+    "paid_runtime_disabled": "CONTINUE_ZERO_COST_ENGINEERING",
+    "provider_credit_exhausted_while_zero_paid_runtime": "NO_ACTION_REQUIRED_CONTINUE_ZERO_COST_ENGINEERING",
     "escalate_only_if_stop_condition": true,
     "bundle_unresolved_questions": true,
     "base_branch_drift": "REPAIR_AND_CONTINUE"
@@ -286,6 +320,8 @@
     "deployment_boundary_contract": "contracts/deployment_boundary.v1.json",
     "scope_authority_document": "docs/SCOPE_AUTHORITY.md",
     "product_invariants": "contracts/product_invariants.v1.json",
+    "model_economics_contract": "contracts/model_economics.v1.json",
+    "model_economics_document": "docs/MODEL_ECONOMICS.md",
     "iteration_contract": "docs/ITERATION_CONTRACT.md",
     "delivery_assurance_contract": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
     "checkpoint_evidence": "GitHub issue/control board",
