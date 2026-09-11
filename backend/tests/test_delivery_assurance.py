@@ -113,6 +113,17 @@ def test_sustained_throttle_migration_opens_and_resets_circuit_safely():
     assert "drop table" not in sql
 
 
+def test_live_exhausted_credit_signal_is_a_hard_limit_and_never_deletes_work():
+    sql = (ROOT / "db" / "migrations" / "20260911105720_classify_exhausted_provider_credit.sql").read_text(encoding="utf-8").lower()
+    assert "last_error_type = 'insufficient_quota'" in sql
+    assert "credit_balance_exhausted" in sql
+    assert "interval '6 hours'" in sql
+    assert "security invoker" in sql
+    assert "security definer" not in sql
+    assert "delete from" not in sql
+    assert "status = 'rejected'" not in sql
+
+
 def test_triage_stops_claiming_backlog_after_first_failed_batch(monkeypatch):
     class EventDB:
         def __init__(self, *_args):

@@ -184,17 +184,17 @@ def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.Monkey
     client = OpenAIResponses(api_key="test", capacity=capacity)
     fake = _FakeSession([_FakeResponse(429, body={"error": {
         "type": "insufficient_quota",
-        "code": "insufficient_quota",
+        "code": "credit_balance_exhausted",
         "message": "sensitive provider prose is deliberately not persisted",
     }}, headers={"retry-after": "30s"})])
     client.http = fake  # type: ignore[assignment]
     sleeps, _ = _fake_clock(monkeypatch)
 
-    with pytest.raises(ProviderBackpressure, match=r"status=429.*type=insufficient_quota.*code=insufficient_quota.*retry_after_seconds=30.0") as exc:
+    with pytest.raises(ProviderBackpressure, match=r"status=429.*type=insufficient_quota.*code=credit_balance_exhausted.*retry_after_seconds=30.0") as exc:
         client._post({"model": "gpt-5.6-sol"})
 
     assert "sensitive provider prose" not in str(exc.value)
-    assert capacity.calls == [("gpt-5.6-sol", 30.0, "insufficient_quota", "insufficient_quota")]
+    assert capacity.calls == [("gpt-5.6-sol", 30.0, "insufficient_quota", "credit_balance_exhausted")]
     assert fake.calls == 1
     assert sleeps == []
 

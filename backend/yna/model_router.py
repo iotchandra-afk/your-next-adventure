@@ -23,7 +23,8 @@ WEB_SEARCH_MAX_CALLS = 5
 MAX_RESPONSE_ATTEMPTS = 4
 MAX_RETRY_DELAY_SECONDS = 300.0
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-NON_RETRYABLE_CAPACITY_CODES = {"insufficient_quota", "billing_hard_limit_reached"}
+NON_RETRYABLE_CAPACITY_TYPES = {"insufficient_quota"}
+NON_RETRYABLE_CAPACITY_CODES = {"insufficient_quota", "billing_hard_limit_reached", "credit_balance_exhausted"}
 ASTRA_WEB_FALLBACK_COOLDOWN_SECONDS = 180.0
 _INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
 _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
@@ -184,7 +185,11 @@ class OpenAIResponses:
                     error = _provider_error(response, model_id, delay)
                     if self.capacity:
                         self.capacity.throttle(model_id, delay, error["type"], error["code"])
-                    if error["code"] in NON_RETRYABLE_CAPACITY_CODES or attempt >= MAX_RESPONSE_ATTEMPTS - 1:
+                    if (
+                        error["type"] in NON_RETRYABLE_CAPACITY_TYPES
+                        or error["code"] in NON_RETRYABLE_CAPACITY_CODES
+                        or attempt >= MAX_RESPONSE_ATTEMPTS - 1
+                    ):
                         raise ProviderBackpressure(_provider_error_message(error))
                     self._arm_model_delay(model_id, delay)
                     continue
