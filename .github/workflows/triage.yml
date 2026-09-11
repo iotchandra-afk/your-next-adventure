@@ -1,8 +1,6 @@
 name: Mandate relevance triage
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '11,26,41,56 * * * *'
 permissions:
   contents: read
 concurrency:
