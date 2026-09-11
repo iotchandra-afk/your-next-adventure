@@ -71,7 +71,6 @@ def _eligible_roles(db: SupabaseREST, limit: int) -> list[dict[str, Any]]:
     return db.select("opportunities", {
         "lifecycle_state": "eq.ACTIVE",
         "screening_stage": "eq.ELIGIBLE",
-        "current_reason_code": "eq.EXECUTIVE_SCOPE_PLAUSIBLE",
         "select": "id,title,location,description_text,posted_at,first_seen_at,last_seen_at,company_id,metadata",
         "order": "first_seen_at.desc",
         "limit": str(limit),
