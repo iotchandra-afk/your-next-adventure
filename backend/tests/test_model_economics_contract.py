@@ -48,4 +48,5 @@ def test_runtime_capacity_checks_spend_before_model_lease() -> None:
     spend_check = runtime.index("if not self.spend_allowed(model_id)")
     lease_call = runtime.index('self._rpc("acquire_model_lease"')
     assert spend_check < lease_call
-    assert "work retained without provider spend" in runtime
+    assert "work retained for retry" in runtime
+    assert "without provider spend" in runtime
