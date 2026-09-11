@@ -21,20 +21,21 @@ Before changing anything, read and obey CURRENT main, in order:
 3. SPEC_MANIFEST.json
 4. contracts/execution_policy.v1.json
 5. contracts/scope_authority.v1.json
-6. docs/SCOPE_AUTHORITY.md
-7. contracts/product_invariants.v1.json
-8. contracts/model_economics.v1.json
-9. docs/MODEL_ECONOMICS.md
-10. docs/ZERO_PAID_RUNTIME_HANDOFF.md
-11. docs/COST_REDESIGN_ACCEPTANCE.md
-12. docs/EXECUTION_MODEL.md
-13. docs/GLASS_COCKPIT.md
-14. docs/ITERATION_CONTRACT.md
-15. docs/DELIVERY_ASSURANCE_CONTRACT.md
-16. docs/DRILLDOWN_ACCEPTANCE.md
-17. docs/DISCOVERY_RECALL_ACCEPTANCE.md
-18. GitHub Issue #1 go-live control board
-19. all CURRENT open P0/P1 issues, especially Issue #14 while it remains open
+6. contracts/deployment_boundary.v1.json
+7. docs/SCOPE_AUTHORITY.md
+8. contracts/product_invariants.v1.json
+9. contracts/model_economics.v1.json
+10. docs/MODEL_ECONOMICS.md
+11. docs/ZERO_PAID_RUNTIME_HANDOFF.md
+12. docs/COST_REDESIGN_ACCEPTANCE.md
+13. docs/EXECUTION_MODEL.md
+14. docs/GLASS_COCKPIT.md
+15. docs/ITERATION_CONTRACT.md
+16. docs/DELIVERY_ASSURANCE_CONTRACT.md
+17. docs/DRILLDOWN_ACCEPTANCE.md
+18. docs/DISCOVERY_RECALL_ACCEPTANCE.md
+19. GitHub Issue #1 go-live control board
+20. all CURRENT open P0/P1 issues, especially Issue #14 while it remains open
 
 Treat GitHub as the canonical control plane and Supabase as canonical runtime state. Resume from current repository/runtime state; do not reconstruct work from conversational summaries when durable evidence is available.
 
@@ -59,7 +60,18 @@ SCOPE AUTHORITY PRECEDENCE IS BINDING:
 - CURRENT open P0/P1 issues outrank closed/merged PR scope summaries;
 - runtime evidence may reopen/falsify a prior PASS;
 - closed/merged PRs and closed issues are historical evidence only and MUST NOT narrow current authorized scope;
+- PR #8 is historical and MUST NOT be used as a permission gate over current open scope;
+- Issue #7 remains relevant for delivery-assurance/runtime repairs that do not conflict with the higher-priority zero-paid economics gate;
+- additive/non-destructive Issue #7 circuit-breaker migration is explicitly authorized when needed and consistent with current higher-priority contracts;
 - do not ask the user to resolve a stale historical-scope conflict unless a higher-priority platform/system policy genuinely blocks execution.
+
+DEPLOYMENT BOUNDARY IS BINDING:
+- GitHub is source/control plane only, not an authorized hosting surface;
+- GitHub Pages is forbidden for YourNextAdventure;
+- the authorized runtime is REPLIT;
+- do not modify chandrakanojia.com, its repository, or its DNS for this project;
+- a deployment target change requires explicit user approval;
+- routine reversible deployment to the already-authorized runtime remains autonomous once normal checks and product invariants pass.
 
 SYSTEMIC DELIVERY ASSURANCE IS MANDATORY:
 - before each material change, build a change-impact map from source -> canonical state -> state transitions -> model/rule decision -> UI query -> label/badge/count -> drill-down/evidence -> runtime capacity -> cost authority;
@@ -82,12 +94,13 @@ POTENCY-PRESERVING REITERATION IS MANDATORY:
 IMPORTANT CONTROL-PLANE WRITE RULE:
 - OUTBOUND_COMMUNICATION_SEND means human-facing communication to a person or external audience outside this project's control plane;
 - repository-native PR/issue/comment/control-board writes, commits/pushes within authorized scope, and authorized Supabase runtime evidence are autonomous project-control actions when inside authorized scope, contain no prohibited private candidate data/secrets, and cross no other reserved boundary;
-- do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or ordinary reversible GitHub Pages deployment;
+- do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or routine reversible deployment to the already-authorized runtime;
 - do not ask the user to approve routine commits or pushes within authorized scope.
 
 IMPORTANT MERGE/DEPLOY/MIGRATION RULE:
 - production is not by itself an approval boundary;
-- routine reversible merges/deployments and additive non-destructive migrations are autonomous when within scope and safe;
+- routine reversible merges, deployment to the authorized REPLIT runtime, and additive non-destructive migrations are autonomous when within scope and safe;
+- GitHub Pages remains forbidden regardless of generic deployment autonomy language;
 - before treating a material slice as complete, affected product invariants and model-economics rules must pass;
 - after deploy, reconcile deployed behavior with canonical runtime state when applicable;
 - if verification fails, autonomously repair, retry, roll forward, or safely roll back and reverify before escalating;
@@ -105,6 +118,7 @@ Reserved approval boundaries are exactly:
 - security-boundary change
 - outbound communication to a person/external audience outside the project control plane
 - final job-application submission
+- deployment target change away from the currently authorized REPLIT runtime
 
 Never put private candidate data or secrets into the public repository.
 
@@ -119,8 +133,9 @@ The persistent runner is correctly initialized only after it has:
 - recognized that provider credit availability is not permission to spend;
 - recognized Issue #14 as the current P0 economics redesign gate;
 - verified scheduled paid-model workflows are disabled and canonical spend policy is closed;
-- read current scope-authority contracts before interpreting historical PR/issue scope;
+- read current scope-authority and deployment-boundary contracts before interpreting historical PR/issue scope;
 - treated closed/merged PRs as historical evidence rather than current permission gates;
+- recognized GitHub Pages as forbidden and REPLIT as the authorized runtime;
 - inspected current main, open PRs/issues/workflows, and current Supabase state;
 - resumed from durable state without asking the user to restate prior decisions;
 - used historical paid outcomes as offline labels before considering any new paid inference;
