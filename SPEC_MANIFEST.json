@@ -2,10 +2,12 @@
   "project": "YourNextAdventure",
   "status": "BUILDING",
   "implementation_authorized": true,
-  "authority_reconciled_at": "2026-09-10",
+  "authority_reconciled_at": "2026-09-11",
   "canonical_spec": "SPEC.md",
   "execution_contract": "AGENTS.md",
   "machine_execution_policy": "contracts/execution_policy.v1.json",
+  "scope_authority_contract": "contracts/scope_authority.v1.json",
+  "scope_authority_document": "docs/SCOPE_AUTHORITY.md",
   "product_invariants": "contracts/product_invariants.v1.json",
   "execution_architecture": "docs/EXECUTION_MODEL.md",
   "persistent_execution_handoff": "docs/WORK_HANDOFF.md",
@@ -16,10 +18,26 @@
     "SPEC.md",
     "AGENTS.md",
     "contracts/execution_policy.v1.json",
+    "contracts/scope_authority.v1.json",
     "contracts/product_invariants.v1.json",
+    "docs/SCOPE_AUTHORITY.md",
     "docs/ITERATION_CONTRACT.md",
     "docs/DELIVERY_ASSURANCE_CONTRACT.md"
   ],
+  "scope_authority_policy": {
+    "precedence": [
+      "PLATFORM_SYSTEM_SAFETY_AND_PERMISSION_CONSTRAINTS",
+      "CURRENT_MAIN_NORMATIVE_CONTRACTS",
+      "CURRENT_OPEN_P0_P1_ISSUES_AND_GO_LIVE_CONTROL_BOARD",
+      "CURRENT_RUNTIME_EVIDENCE_REOPENING_OR_FALSIFYING_PRIOR_PASS",
+      "ACTIVE_IMPLEMENTATION_PRS_AND_BRANCHES",
+      "CLOSED_MERGED_PRS_CLOSED_ISSUES_AND_HISTORICAL_SUMMARIES"
+    ],
+    "historical_closed_or_merged_artifacts_are_scope_authority": false,
+    "current_open_issue_supersedes_prior_completion_statement": true,
+    "stale_historical_conflict_requires_user_approval": false,
+    "current_issue_7_explicitly_authorizes_additive_reversible_provider_diagnostics_circuit_breaker_migrations_and_commit_push": true
+  },
   "acceptance_contracts": {
     "drilldown": {
       "path": "docs/DRILLDOWN_ACCEPTANCE.md",
@@ -51,6 +69,7 @@
     "product_requirements": "SPEC.md",
     "autonomous_agent_behavior": "AGENTS.md",
     "machine_enforcement_contract": "contracts/execution_policy.v1.json",
+    "scope_precedence_and_stale_artifact_resolution": "contracts/scope_authority.v1.json",
     "product_cross_layer_invariants": "contracts/product_invariants.v1.json",
     "iteration_and_red_team_behavior": "docs/ITERATION_CONTRACT.md",
     "release_and_delivery_assurance": "docs/DELIVERY_ASSURANCE_CONTRACT.md"
@@ -72,6 +91,7 @@
     "issue_creation_or_update_requires_approval": false,
     "issue_or_pr_control_plane_comment_requires_approval": false,
     "checkpoint_evidence_write_requires_approval": false,
+    "commit_and_push_within_authorized_scope_requires_approval": false,
     "constraints": [
       "WITHIN_ALREADY_AUTHORIZED_SCOPE",
       "NO_PRIVATE_CANDIDATE_DATA_OR_SECRETS_IN_PUBLIC_REPO",
@@ -85,6 +105,7 @@
     "github_pages_deployment_requires_approval": false,
     "production_label_alone_is_approval_boundary": false,
     "destructive_or_materially_irreversible_production_operation_requires_approval": true,
+    "additive_non_destructive_supabase_migration_requires_approval": false,
     "pr_ready_is_done": false,
     "ci_passed_is_done": false,
     "deployment_ready_is_done": false,
