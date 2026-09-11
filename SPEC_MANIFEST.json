@@ -9,6 +9,8 @@
   "scope_authority_contract": "contracts/scope_authority.v1.json",
   "scope_authority_document": "docs/SCOPE_AUTHORITY.md",
   "product_invariants": "contracts/product_invariants.v1.json",
+  "model_economics_contract": "contracts/model_economics.v1.json",
+  "model_economics_document": "docs/MODEL_ECONOMICS.md",
   "execution_architecture": "docs/EXECUTION_MODEL.md",
   "persistent_execution_handoff": "docs/WORK_HANDOFF.md",
   "iteration_contract": "docs/ITERATION_CONTRACT.md",
@@ -20,9 +22,11 @@
     "contracts/execution_policy.v1.json",
     "contracts/scope_authority.v1.json",
     "contracts/product_invariants.v1.json",
+    "contracts/model_economics.v1.json",
     "docs/SCOPE_AUTHORITY.md",
     "docs/ITERATION_CONTRACT.md",
-    "docs/DELIVERY_ASSURANCE_CONTRACT.md"
+    "docs/DELIVERY_ASSURANCE_CONTRACT.md",
+    "docs/MODEL_ECONOMICS.md"
   ],
   "scope_authority_policy": {
     "precedence": [
@@ -63,6 +67,15 @@
       "requires_positive_and_negative_assertions": true,
       "requires_runtime_reconciliation_when_applicable": true,
       "requires_deployed_verification_for_user_visible_changes": true
+    },
+    "model_economics": {
+      "path": "docs/MODEL_ECONOMICS.md",
+      "machine_contract": "contracts/model_economics.v1.json",
+      "priority": "P0",
+      "current_mode": "ZERO_PAID_RUNTIME",
+      "required_before_paid_runtime_resume": true,
+      "representative_universe_min_roles": 1000,
+      "max_paid_screening_cycle_usd": 2.0
     }
   },
   "authority_split": {
@@ -71,6 +84,7 @@
     "machine_enforcement_contract": "contracts/execution_policy.v1.json",
     "scope_precedence_and_stale_artifact_resolution": "contracts/scope_authority.v1.json",
     "product_cross_layer_invariants": "contracts/product_invariants.v1.json",
+    "model_spend_and_cost_architecture": "contracts/model_economics.v1.json",
     "iteration_and_red_team_behavior": "docs/ITERATION_CONTRACT.md",
     "release_and_delivery_assurance": "docs/DELIVERY_ASSURANCE_CONTRACT.md"
   },
@@ -83,6 +97,20 @@
     "persistent_runner_must_continue_across_internal_engineering_units": true,
     "persistent_runner_must_reiterate_across_material_slices": true,
     "persistent_runner_must_verify_affected_product_invariants": true
+  },
+  "model_economics_policy": {
+    "current_mode": "ZERO_PAID_RUNTIME",
+    "provider_credit_is_spend_authority": false,
+    "scheduled_paid_model_workflows_enabled": false,
+    "enabling_paid_runtime_requires_owner_approval": true,
+    "raising_budget_requires_owner_approval": true,
+    "deterministic_first": true,
+    "target_max_sol_triage_fraction": 0.10,
+    "target_max_astra_fraction": 0.02,
+    "deep_intelligence_requires_qualified_opportunity_or_active_pursuit": true,
+    "duplicate_paid_reasoning_must_be_prevented": true,
+    "validation_cycle_budget_usd": 2.0,
+    "validation_daily_budget_usd": 2.0
   },
   "control_plane_write_policy": {
     "github_repository_native_writes_require_outbound_communication_approval": false,
@@ -119,7 +147,7 @@
   "allowed_unsolicited_stop_conditions": [
     "BLOCKED",
     "APPROVAL_REQUIRED",
-    "HUMAN ACTION REQUIRED",
+    "HUMAN_ACTION_REQUIRED",
     "DONE"
   ],
   "checkpoint_requires_user_acknowledgement": false,
