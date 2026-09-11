@@ -31,12 +31,11 @@ def prepare_snapshot(source: dict[str, Any], jobs: list[RawJob]) -> tuple[list[d
             continue
         seen.add(job.external_id)
         stage, visibility, reason_code, confidence = deterministic_screen(job.title)
-        if reason_code == "EXECUTIVE_SCOPE_PLAUSIBLE":
-            reason_text = "Plausible executive scope; retained for mandate-aware relevance triage."
-        elif reason_code == "MANDATE_REVIEW_REQUIRED":
-            reason_text = "Title alone is insufficient for a safe rejection; retained below the glass for mandate-aware triage."
-        else:
-            reason_text = "High-confidence deterministic title exclusion; retained in the auditable hidden universe."
+        reason_text = (
+            "Residual executive-mandate ambiguity; retained below the glass for paid triage only when authorized."
+            if stage == "ELIGIBLE"
+            else "Conservative deterministic pre-triage resolved an obvious non-target; retained in the auditable hidden universe."
+        )
         # Discovery deliberately stores only what the stable listing endpoint provides.
         # Provider-specific detail fetches belong to the relevance/intelligence capabilities,
         # after a role has earned the additional network and reasoning cost.

@@ -147,7 +147,7 @@ For this project, these are routine autonomous actions when they stay inside app
 - update/rebase an implementation branch;
 - resolve routine non-consequential conflicts;
 - merge or squash-merge an implementation PR to `main`;
-- deploy the cockpit to GitHub Pages from `main`;
+- deploy the cockpit to the authorized Replit runtime from `main`;
 - verify the deployment;
 - apply additive/non-destructive migrations already required by the approved architecture.
 

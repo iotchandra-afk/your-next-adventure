@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from .intake import SupabaseREST
@@ -44,6 +45,71 @@ class RuntimeCapacity:
         bounded budget must both permit the model before a lease can be claimed.
         """
         return self._rpc("model_spend_allowed", {"p_model_id": model_id}) is True
+
+    def reserve_spend(
+        self,
+        model_id: str,
+        capability: str,
+        reserved_usd: float,
+        request_key: str,
+        model_run_id: str | None = None,
+    ) -> str:
+        result = self._rpc("reserve_model_spend", {
+            "p_request_key": request_key,
+            "p_capability": capability,
+            "p_model_id": model_id,
+            "p_reserved_usd": round(max(0.0001, reserved_usd), 4),
+            "p_model_run_id": model_run_id,
+            "p_ttl_seconds": self.ttl_seconds,
+        })
+        if not isinstance(result, dict) or result.get("allowed") is not True or not result.get("reservation_id"):
+            reason = result.get("reason") if isinstance(result, dict) else "RESERVATION_UNAVAILABLE"
+            raise CapacityUnavailable(
+                f"Paid request blocked before provider call for {model_id}: {reason}; work retained for retry."
+            )
+        return str(result["reservation_id"])
+
+    def reconcile_spend(self, reservation_id: str, actual_usd: float, outcome: str) -> None:
+        reconciled = self._rpc("reconcile_model_spend", {
+            "p_reservation_id": reservation_id,
+            "p_actual_usd": round(max(0.0, actual_usd), 4),
+            "p_outcome": outcome,
+        })
+        if reconciled is not True:
+            raise CapacityUnavailable("Model spend reservation could not be reconciled safely.")
+
+    def cached_response(self, request_hash: str) -> dict[str, Any] | None:
+        rows = self.db.select("model_response_cache", {
+            "request_hash": f"eq.{request_hash}", "select": "response_body", "limit": "1",
+        })
+        if not rows:
+            return None
+        self.db.patch("model_response_cache", {"request_hash": f"eq.{request_hash}"}, {
+            "last_reused_at": datetime.now(timezone.utc).isoformat(),
+            "reuse_count": self._reuse_count(request_hash) + 1,
+        })
+        return rows[0].get("response_body")
+
+    def _reuse_count(self, request_hash: str) -> int:
+        rows = self.db.select("model_response_cache", {
+            "request_hash": f"eq.{request_hash}", "select": "reuse_count", "limit": "1",
+        })
+        return int(rows[0].get("reuse_count") or 0) if rows else 0
+
+    def store_response(
+        self,
+        request_hash: str,
+        capability: str,
+        model_id: str,
+        response_body: dict[str, Any],
+        actual_cost_usd: float,
+        model_run_id: str | None,
+    ) -> None:
+        self.db.upsert("model_response_cache", {
+            "request_hash": request_hash, "capability": capability, "model_id": model_id,
+            "model_run_id": model_run_id, "response_body": response_body,
+            "actual_cost_usd": round(max(0.0, actual_cost_usd), 4),
+        }, "request_hash")
 
     def acquire(self, model_id: str) -> None:
         if not self.spend_allowed(model_id):

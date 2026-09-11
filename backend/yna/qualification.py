@@ -9,6 +9,7 @@ from typing import Any
 
 from .intake import SupabaseREST
 from .model_router import OpenAIResponses, estimated_cost
+from .paid_cache import reusable_model_run
 from .triage import _company, _ensure_description, _private_context, _source_evidence
 
 CAPABILITY = "DEEP_QUALIFICATION"
@@ -153,16 +154,46 @@ def semantic_input_hash(
     })
 
 
-def _passed_run(db: SupabaseREST, opportunity_id: str, input_hash: str) -> bool:
-    rows = db.select("model_runs", {
-        "opportunity_id": f"eq.{opportunity_id}",
-        "capability": f"eq.{CAPABILITY}",
-        "input_hash": f"eq.{input_hash}",
-        "status": "eq.PASSED",
-        "select": "id",
+def _passed_run(db: SupabaseREST, opportunity_id: str, input_hash: str) -> dict[str, Any] | None:
+    return reusable_model_run(
+        db,
+        capability=CAPABILITY,
+        input_hash=input_hash,
+        policy_version=POLICY_VERSION,
+        output_schema_version=OUTPUT_SCHEMA_VERSION,
+        opportunity_id=opportunity_id,
+    )
+
+
+def _reconcile_durable_qualification(db: SupabaseREST, role_id: str, run: dict[str, Any]) -> str | None:
+    trace_id = run.get("trace_id")
+    if not trace_id:
+        return None
+    rows = db.select("screening_decisions", {
+        "trace_id": f"eq.{trace_id}",
+        "stage": "eq.DEEP_QUALIFICATION",
+        "select": "outcome,reason_code,reason_text,confidence,evidence,policy_version",
         "limit": "1",
     })
-    return bool(rows)
+    if not rows:
+        return None
+    decision = rows[0]
+    current = db.select("opportunities", {"id": f"eq.{role_id}", "select": "metadata", "limit": "1"})
+    metadata = dict((current[0].get("metadata") if current else {}) or {})
+    metadata.update({"deep_qualification": decision.get("evidence") or {}, "deep_qualification_trace_id": trace_id})
+    priority = {
+        "TIER_1_DEEP_QUALIFY": "TIER_1", "TIER_2_WORTH_EXPLORING": "TIER_2",
+        "TIER_3_MONITOR": "MONITOR", "NEEDS_DATA": "NEEDS_DATA", "REJECT": "REJECT",
+    }[decision["outcome"]]
+    visibility = "SURFACED" if priority in {"TIER_1", "TIER_2", "MONITOR"} else ("GRAY_ZONE" if priority == "NEEDS_DATA" else "HIDDEN")
+    db.patch("opportunities", {"id": f"eq.{role_id}"}, {
+        "screening_stage": "PRIORITIZED", "priority_class": priority, "visibility": visibility,
+        "current_reason_code": decision.get("reason_code"), "current_reason_text": decision.get("reason_text"),
+        "current_confidence": decision.get("confidence"), "policy_version": decision.get("policy_version") or POLICY_VERSION,
+        "metadata": metadata,
+        "updated_at": utcnow(),
+    })
+    return decision["outcome"]
 
 
 def _persist(
@@ -217,7 +248,8 @@ def qualify_one(
         role, company.get("display_name"), description, sources, triage,
         candidate_version, pursuit_policy_version,
     )
-    if _passed_run(db, role["id"], input_hash):
+    passed = _passed_run(db, role["id"], input_hash)
+    if passed and _reconcile_durable_qualification(db, role["id"], passed):
         return "SKIPPED_UNCHANGED"
 
     context = {
@@ -256,6 +288,7 @@ def qualify_one(
             json.dumps(context, ensure_ascii=False),
             "deep_qualification",
             SCHEMA,
+            model_run_id=run["id"],
         )
         evidence = {
             "native_class": result["native_class"],

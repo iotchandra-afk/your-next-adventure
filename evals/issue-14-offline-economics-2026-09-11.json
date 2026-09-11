@@ -1,0 +1,68 @@
+{
+  "evidence_date": "2026-09-11",
+  "mode": "ZERO_PAID_RUNTIME",
+  "provider_calls_made": 0,
+  "canonical_source": "Supabase offline_economics_replay_v3",
+  "representative_roles": 1264,
+  "historical_labels": {
+    "known_good": 41,
+    "relevant": 8,
+    "possible": 33,
+    "known_good_retained": 41,
+    "known_good_recall": 1.0,
+    "false_negatives": 0
+  },
+  "deterministic_gate": {
+    "eliminated": 1175,
+    "elimination_rate": 0.929589,
+    "sol_residual": 89,
+    "sol_fraction": 0.070411,
+    "confusion_matrix": {
+      "DETERMINISTIC_CLEAR_NO": {
+        "historical_clear_no": 146,
+        "historical_possible": 0,
+        "historical_relevant": 0,
+        "unlabeled": 1029
+      },
+      "SOL_AMBIGUITY": {
+        "historical_clear_no": 41,
+        "historical_possible": 33,
+        "historical_relevant": 8,
+        "unlabeled": 7
+      }
+    }
+  },
+  "routing_projection": {
+    "astra_qualification_count": 8,
+    "astra_fraction": 0.006329,
+    "deep_intelligence_gate": "SURFACED_TIER_1_OR_TIER_2_OR_EXPLICIT_ACTIVE_PURSUIT"
+  },
+  "cost_projection_per_1000_roles_usd": {
+    "historical_sol_unit_cost": 0.022908,
+    "paid_screening_sol": 1.613,
+    "historical_astra_qualification_unit_cost": 0.12259,
+    "downstream_astra_qualification_separate_from_screening_gate": 0.7759
+  },
+  "canonical_reconciliation": {
+    "roles_reconciled": 1174,
+    "deterministic_clear_no": 1114,
+    "eligible_for_sol": 60,
+    "idempotent_second_pass_reconciled": 0,
+    "running_model_runs": 0,
+    "spend_reservations": 0
+  },
+  "spend_policy": {
+    "mode": "ZERO_PAID_RUNTIME",
+    "paid_runtime_enabled": false,
+    "sol_enabled": false,
+    "astra_enabled": false,
+    "cycle_ceiling_usd": 2.0,
+    "daily_ceiling_usd": 2.0,
+    "two_reservation_attempts_denied_before_provider": true
+  },
+  "duplicate_claim_probe": {
+    "first_claims": 1,
+    "duplicate_claims": 0,
+    "test_row_removed": true
+  }
+}

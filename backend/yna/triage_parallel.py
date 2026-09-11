@@ -8,9 +8,10 @@ from typing import Any
 from .intake import SupabaseREST, utcnow
 from .model_router import OpenAIResponses
 from .triage import (
-    CAPABILITY, INSTRUCTIONS, POLICY_VERSION, SCHEMA,
+    CAPABILITY, INSTRUCTIONS, OUTPUT_SCHEMA_VERSION, POLICY_VERSION, SCHEMA,
     _company, _eligible_roles, _ensure_description, _persist_result,
-    _private_context, _source_evidence, stable_hash,
+    _passed_run, _private_context, _reconcile_durable_decision,
+    _source_evidence, semantic_input_hash,
 )
 
 DEFAULT_LIMIT = 96
@@ -47,7 +48,7 @@ def _context(db: SupabaseREST, role: dict[str, Any]) -> tuple[dict[str, Any], li
         "company": company.get("display_name"),
         "title": role.get("title"),
         "location": role.get("location"),
-        "description": description[:5000],
+        "description": description[:18000],
         "posted_at": role.get("posted_at"),
         "first_seen_at": role.get("first_seen_at"),
         "last_seen_at": role.get("last_seen_at"),
@@ -74,10 +75,23 @@ def triage_batch(
 ) -> list[str]:
     contexts: list[dict[str, Any]] = []
     sources_by_id: dict[str, list[dict[str, Any]]] = {}
+    hashes_by_id: dict[str, str] = {}
+    outcomes: list[str] = []
     for role in roles:
         context, sources = _context(db, role)
+        input_hash = semantic_input_hash(
+            role, context.get("company"), context.get("description") or "", sources,
+            candidate_version, pursuit_policy_version,
+        )
+        passed = _passed_run(db, role["id"], input_hash)
+        if passed and _reconcile_durable_decision(db, role["id"], passed):
+            outcomes.append("SKIPPED_UNCHANGED")
+            continue
         contexts.append(context)
         sources_by_id[role["id"]] = sources
+        hashes_by_id[role["id"]] = input_hash
+    if not contexts:
+        return outcomes
     request = {
         "opportunities": contexts,
         "candidate_truth": candidate,
@@ -96,8 +110,8 @@ def triage_batch(
             "model_id": "gpt-5.6-sol",
             "reasoning_effort": "high",
             "status": "RUNNING",
-            "input_hash": stable_hash({"opportunity": context, "candidate_version": candidate_version, "pursuit_policy_version": pursuit_policy_version, "policy": POLICY_VERSION}),
-            "output_schema_version": "relevance-triage-batch-v1",
+            "input_hash": hashes_by_id[context["id"]],
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
             "policy_version": POLICY_VERSION,
             "trace_id": trace_id,
             "started_at": utcnow(),
@@ -110,6 +124,7 @@ def triage_batch(
             json.dumps(request, ensure_ascii=False),
             "relevance_triage_batch",
             BATCH_SCHEMA,
+            model_run_id=next(iter(runs_by_id.values())),
         )
         decisions = validate_batch_decisions(result, {role["id"] for role in roles})
         usage = raw.get("usage") or {}
@@ -118,7 +133,6 @@ def triage_batch(
             "input_tokens": int(usage.get("input_tokens") or 0) // divisor,
             "output_tokens": int(usage.get("output_tokens") or 0) // divisor,
         }
-        outcomes: list[str] = []
         for decision in decisions:
             role_id = decision["opportunity_id"]
             evidence = {
@@ -157,7 +171,7 @@ def run() -> int:
     ai = OpenAIResponses()
     candidate, pursuit_policy, candidate_version, pursuit_policy_version = _private_context(db)
     roles = _eligible_roles(db, limit)
-    results = {"RELEVANT": 0, "POSSIBLE": 0, "CLEAR_NO": 0, "FAILED": 0}
+    results = {"RELEVANT": 0, "POSSIBLE": 0, "CLEAR_NO": 0, "SKIPPED_UNCHANGED": 0, "FAILED": 0}
     attempted = 0
     for start in range(0, len(roles), batch_size):
         batch = roles[start:start + batch_size]
@@ -177,7 +191,7 @@ def run() -> int:
             # worker, not eight independent role outcomes. Stop claiming more work;
             # later roles remain untouched and the scheduler can retry after recovery.
             break
-    evaluated = results["RELEVANT"] + results["POSSIBLE"] + results["CLEAR_NO"]
+    evaluated = results["RELEVANT"] + results["POSSIBLE"] + results["CLEAR_NO"] + results["SKIPPED_UNCHANGED"]
     unclaimed = len(roles) - attempted
     db.insert("activity_events", {
         "event_type": "RELEVANCE_TRIAGE_BATCH_COMPLETED",

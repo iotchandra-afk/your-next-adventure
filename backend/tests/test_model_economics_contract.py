@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from yna.model_router import OpenAIResponses
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,3 +54,49 @@ def test_runtime_capacity_checks_spend_before_model_lease() -> None:
     assert spend_check < lease_call
     assert "work retained for retry" in runtime
     assert "without provider spend" in runtime
+
+
+def test_atomic_reservation_is_global_idempotent_and_fail_safe() -> None:
+    sql = (ROOT / "db" / "migrations" / "20260911162243_atomic_model_spend_reservations.sql").read_text(encoding="utf-8").lower()
+    assert "select * into v_policy from public.model_spend_policy where id = 1 for update" in sql
+    assert "model_runs_paid_identity_once_idx" in sql
+    assert "status in ('running','passed')" in sql
+    assert "request_key text not null unique" in sql
+    assert "v_cycle_committed + p_reserved_usd > v_policy.validation_cycle_budget_usd" in sql
+    assert "v_day_committed + p_reserved_usd > v_policy.validation_daily_budget_usd" in sql
+    assert "when p_outcome = 'no_charge' then 0" in sql
+    assert "when p_outcome = 'uncertain' then reserved_usd" in sql
+    assert sql.count("security invoker") == 6
+    assert "security definer" not in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+
+
+def test_automatic_model_client_fails_closed_without_canonical_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="budget enforcement"):
+        OpenAIResponses(api_key="test")
+
+
+def test_every_paid_path_has_reuse_and_batch_checks_before_claim() -> None:
+    files = {name: (ROOT / "backend" / "yna" / name).read_text(encoding="utf-8") for name in [
+        "triage.py", "triage_parallel.py", "qualification.py", "audit.py", "intelligence.py", "discovery.py"
+    ]}
+    assert "reusable_model_run" in files["triage.py"]
+    assert files["triage_parallel.py"].index("_passed_run(") < files["triage_parallel.py"].index('db.insert("model_runs"')
+    assert "reusable_model_run" in files["qualification.py"]
+    assert "reusable_model_run" in files["audit.py"]
+    assert "_passed_record" in files["intelligence.py"]
+    assert "discovery_pass_reusable" in files["discovery.py"]
+    shared_client = (ROOT / "backend" / "yna" / "model_router.py").read_text(encoding="utf-8")
+    assert shared_client.count("cached_response(request_hash)") == 2
+    assert shared_client.index("cached_response(request_hash)") < shared_client.index("reserve_spend(")
+
+
+def test_deep_intelligence_is_tier_or_active_pursuit_gated() -> None:
+    from yna.intelligence import deep_intelligence_allowed
+
+    assert deep_intelligence_allowed({"screening_stage": "PRIORITIZED", "visibility": "SURFACED", "priority_class": "TIER_1"})
+    assert deep_intelligence_allowed({"metadata": {"pursuit_status": "ACTIVE"}})
+    assert not deep_intelligence_allowed({"screening_stage": "TRIAGE_RELEVANT", "visibility": "SURFACED"})
+    assert not deep_intelligence_allowed({"screening_stage": "PRIORITIZED", "visibility": "SURFACED", "priority_class": "MONITOR"})

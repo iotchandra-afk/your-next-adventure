@@ -10,6 +10,7 @@ from typing import Any
 
 from .intake import SupabaseREST
 from .model_router import OpenAIResponses, estimated_cost
+from .paid_cache import reusable_model_run
 from .triage import _company, _ensure_description, _private_context, _source_evidence
 
 CAPABILITY = "FALSE_NEGATIVE_AUDIT"
@@ -199,6 +200,16 @@ def audit_one(
         "pursuit_policy_version": pursuit_policy_version,
     }
     input_hash = stable_hash(context)
+    passed = reusable_model_run(
+        db,
+        capability=CAPABILITY,
+        input_hash=input_hash,
+        policy_version=POLICY_VERSION,
+        output_schema_version=OUTPUT_SCHEMA_VERSION,
+        opportunity_id=role["id"],
+    )
+    if passed and _already_audited(db, role["id"], decision.get("id") if decision else None):
+        return "SKIPPED_UNCHANGED"
     trace_id = str(uuid.uuid4())
     run = db.insert("model_runs", {
         "capability": CAPABILITY,
@@ -220,6 +231,7 @@ def audit_one(
             json.dumps(context, ensure_ascii=False),
             "false_negative_audit",
             SCHEMA,
+            model_run_id=run["id"],
         )
         _persist(
             db,
@@ -250,7 +262,7 @@ def run() -> int:
     candidate, pursuit_policy, candidate_version, pursuit_policy_version = _private_context(db)
     limit = max(1, min(int(os.environ.get("AUDIT_LIMIT", "6")), 12))
     roles = _candidates(db, limit)
-    results = {"REJECT_CONFIRMED": 0, "FALSE_NEGATIVE_RISK": 0, "NEEDS_MORE_DATA": 0, "FAILED": 0}
+    results = {"REJECT_CONFIRMED": 0, "FALSE_NEGATIVE_RISK": 0, "NEEDS_MORE_DATA": 0, "SKIPPED_UNCHANGED": 0, "FAILED": 0}
     for role in roles:
         try:
             outcome = audit_one(db, ai, role, candidate, pursuit_policy, candidate_version, pursuit_policy_version)

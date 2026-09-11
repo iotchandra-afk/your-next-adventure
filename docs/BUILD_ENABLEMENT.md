@@ -25,16 +25,11 @@ Recommended: create a new `YourNextAdventure-dev` project rather than reusing th
 
 User must explicitly identify the Supabase organization in which the new project should be created. Cost confirmation must be obtained before project creation.
 
-### 2. GitHub Pages
+### 2. Replit runtime
 
-For the first live cockpit, use GitHub Pages as a zero-cost deployment target for the authenticated React application.
+The deployment boundary authorizes Replit for the authenticated React application. GitHub remains source/control plane only; GitHub Pages and personal-site infrastructure are forbidden.
 
-User action:
-- Repository Settings -> Pages
-- Source -> GitHub Actions
-
-Expected initial URL:
-`https://iotchandra-afk.github.io/your-next-adventure/`
+Use the existing Replit project and connection. If its interactive authentication is unavailable at deployment time, record that exact runtime limitation rather than switching targets.
 
 ### 3. GitHub Actions secrets
 
@@ -116,7 +111,7 @@ For the first live system:
 - GitHub Actions: scheduled intake, reconciliation, qualification, evals
 - Supabase/PostgreSQL: canonical runtime state, Auth, RLS, realtime activity
 - React + TypeScript: glass cockpit
-- GitHub Pages: initial authenticated frontend hosting
+- Replit: authorized authenticated frontend runtime
 - OpenAI provider adapter: high-value reasoning only
 - Public ATS/company endpoints: intake before paid data sources
 - Playwright: tests and later browser execution only where HTTP is insufficient

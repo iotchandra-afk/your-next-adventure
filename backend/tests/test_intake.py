@@ -16,22 +16,22 @@ def test_director_plus_is_eligible_not_surfaced():
     stage, visibility, reason, confidence = deterministic_screen("Vice President, Technology Transformation Lead")
     assert stage == "ELIGIBLE"
     assert visibility == "HIDDEN"
-    assert reason == "EXECUTIVE_SCOPE_PLAUSIBLE"
-    assert confidence >= 0.9
+    assert reason == "RESIDUAL_MANDATE_AMBIGUITY"
+    assert confidence >= 0.68
 
 
 def test_ceo_acronym_is_never_false_negative():
     stage, visibility, reason, _ = deterministic_screen("CEO, AI Services - US-Based")
     assert stage == "ELIGIBLE"
     assert visibility == "HIDDEN"
-    assert reason == "EXECUTIVE_SCOPE_PLAUSIBLE"
+    assert reason == "RESIDUAL_EXECUTIVE_AMBIGUITY"
 
 
 def test_ambiguous_title_is_retained_for_mandate_triage():
     stage, visibility, reason, confidence = deterministic_screen("Senior Product Manager")
     assert stage == "ELIGIBLE"
     assert visibility == "HIDDEN"
-    assert reason == "MANDATE_REVIEW_REQUIRED"
+    assert reason == "RESIDUAL_MANDATE_AMBIGUITY"
     assert confidence < 0.7
 
 
