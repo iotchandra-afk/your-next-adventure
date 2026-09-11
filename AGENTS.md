@@ -122,8 +122,9 @@ The following MUST proceed without asking the user for approval when they are wi
 - updating/rebasing an implementation branch against `main`;
 - resolving routine merge conflicts that do not change product intent or a reserved boundary;
 - squash-merging or otherwise merging an implementation PR to `main`;
-- a GitHub Pages deployment triggered by `main`;
-- verification of that deployment;
+- deployment only through the explicitly authorized runtime surface defined by current project policy;
+- verification of that authorized deployment;
+- GitHub Pages, `chandrakanojia.com`, `iotchandra-afk.github.io`, and personal-site repositories/DNS are forbidden deployment surfaces for YourNextAdventure;
 - additive/non-destructive schema migrations already required by the approved architecture.
 
 If a PR becomes non-mergeable because `main` advanced, the agent MUST repair/update the branch, rerun the required checks, merge when safe, verify the deployment, and continue. It MUST NOT convert ordinary branch drift into a user approval request.
