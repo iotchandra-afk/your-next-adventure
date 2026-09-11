@@ -1,8 +1,6 @@
 name: Deep qualification
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '7 */2 * * *'
 permissions:
   contents: read
 concurrency:
