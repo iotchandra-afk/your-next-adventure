@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import random
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -31,6 +33,22 @@ _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)", re.IGNORECASE)
 _CAPACITY_AUTO = object()
 
+MAX_OUTPUT_TOKENS = {
+    "MARKET_DISCOVERY": 2400,
+    "RELEVANCE_TRIAGE": 700,
+    "FALSE_NEGATIVE_AUDIT": 900,
+    "DEEP_QUALIFICATION": 1200,
+    "COMPANY_TRAJECTORY": 1800,
+    "NATIVE_CANDIDATE": 1200,
+    "COMMERCIAL_PRESSURE": 1200,
+    "STAKEHOLDER_CONTEXT": 1600,
+    "ROLE_READINESS": 1000,
+    "CORE_X": 1800,
+    "TWO_NOTCH_UP": 1400,
+    "POSITIONING_LOCK": 1400,
+    "FINAL_RED_TEAM": 1200,
+}
+
 
 class ProviderBackpressure(RuntimeError):
     """A classified provider-capacity failure safe to persist as telemetry."""
@@ -46,7 +64,7 @@ class Route:
 ROUTES = {
     "MARKET_DISCOVERY": Route("STANDARD_REASONING", "gpt-5.6-sol", "high"),
     "RELEVANCE_TRIAGE": Route("STANDARD_REASONING", "gpt-5.6-sol", "high"),
-    "FALSE_NEGATIVE_AUDIT": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),
+    "FALSE_NEGATIVE_AUDIT": Route("STANDARD_REASONING", "gpt-5.6-sol", "high"),
     "DEEP_QUALIFICATION": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),
     "COMPANY_TRAJECTORY": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),
     "NATIVE_CANDIDATE": Route("HIGH_CONSEQUENCE_REASONING", "gpt-6-astra", "high"),
@@ -74,6 +92,8 @@ class OpenAIResponses:
         })
         self._not_before_by_model: dict[str, float] = {}
         self.capacity = RuntimeCapacity.from_environment() if capacity is _CAPACITY_AUTO else capacity
+        if capacity is _CAPACITY_AUTO and self.capacity is None:
+            raise RuntimeError("SUPABASE_SECRET_KEY is required for paid-model budget enforcement")
 
     def assert_model_available(self, model_id: str) -> dict[str, Any]:
         response = self.http.get(f"{self.base}/models/{model_id}", timeout=30)
@@ -90,10 +110,11 @@ class OpenAIResponses:
         input_text: str,
         schema_name: str,
         schema: dict[str, Any],
+        model_run_id: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any], Route]:
         route = ROUTES[capability]
-        payload = self._base_payload(route, instructions, input_text, schema_name, schema)
-        body = self._post(payload)
+        payload = self._base_payload(capability, route, instructions, input_text, schema_name, schema)
+        body = self._post(payload, capability=capability, model_run_id=model_run_id)
         parsed = clean_structured_result(json.loads(self._extract_output_text(body)))
         return parsed, body, route
 
@@ -105,6 +126,7 @@ class OpenAIResponses:
         schema_name: str,
         schema: dict[str, Any],
         max_tool_calls: int = WEB_SEARCH_MAX_CALLS,
+        model_run_id: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any], Route, list[dict[str, str]]]:
         """Run a typed capability with current-web grounding and bounded research.
 
@@ -114,25 +136,29 @@ class OpenAIResponses:
         storing every exploratory result returned to the model.
         """
         route = ROUTES[capability]
-        payload = self._base_payload(route, instructions, input_text, schema_name, schema)
+        payload = self._base_payload(capability, route, instructions, input_text, schema_name, schema)
         payload.update({
             "tools": [{"type": "web_search", "search_context_size": "low"}],
             "tool_choice": "required",
             "max_tool_calls": max(1, min(int(max_tool_calls), WEB_SEARCH_MAX_CALLS)),
             "include": ["web_search_call.action.sources"],
         })
-        body = self._post(payload, timeout=360)
+        body = self._post(payload, timeout=360, capability=capability, model_run_id=model_run_id)
         parsed = clean_structured_result(json.loads(self._extract_output_text(body)))
         return parsed, body, route, self.web_sources(body)
 
     def _base_payload(
         self,
+        capability: str,
         route: Route,
         instructions: str,
         input_text: str,
         schema_name: str,
         schema: dict[str, Any],
     ) -> dict[str, Any]:
+        max_output = MAX_OUTPUT_TOKENS.get(capability, 1200)
+        if schema_name.endswith("_batch"):
+            max_output *= min(int(schema.get("properties", {}).get("decisions", {}).get("maxItems", 1)), 12)
         return {
             "model": route.model_id,
             "instructions": instructions,
@@ -148,9 +174,16 @@ class OpenAIResponses:
                 },
             },
             "store": False,
+            "max_output_tokens": max_output,
         }
 
-    def _post(self, payload: dict[str, Any], timeout: int = 240) -> dict[str, Any]:
+    def _post(
+        self,
+        payload: dict[str, Any],
+        timeout: int = 240,
+        capability: str = "UNKNOWN",
+        model_run_id: str | None = None,
+    ) -> dict[str, Any]:
         """POST without silently downgrading quality; retry only transient failures.
 
         High-cost grounded Astra calls can consume most of a token-rate window even
@@ -160,9 +193,32 @@ class OpenAIResponses:
         absent. A 429 retries the exact same request/model; no quality downgrade occurs.
         """
         model_id = str(payload.get("model") or "")
+        request_hash = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         if self.capacity:
+            cached = self.capacity.cached_response(request_hash)
+            if cached:
+                return cached
             self.capacity.acquire(model_id)
+            # A concurrent worker may have populated the cache while this caller
+            # waited for the shared model lease. Recheck before reserving or spending.
+            cached = self.capacity.cached_response(request_hash)
+            if cached:
+                self.capacity.release(model_id, True)
+                return cached
+        reservation_id: str | None = None
+        if self.capacity:
+            reservation_id = self.capacity.reserve_spend(
+                model_id,
+                capability,
+                reservation_ceiling_usd(model_id, payload),
+                f"{capability}:{uuid.uuid4()}",
+                model_run_id,
+            )
         succeeded = False
+        actual_cost = 0.0
+        charge_outcome = "NO_CHARGE"
         last_network_error: Exception | None = None
         try:
             for attempt in range(MAX_RESPONSE_ATTEMPTS):
@@ -175,6 +231,7 @@ class OpenAIResponses:
                     response = self.http.post(f"{self.base}/responses", json=payload, timeout=timeout)
                 except (requests.Timeout, requests.ConnectionError) as exc:
                     last_network_error = exc
+                    charge_outcome = "UNCERTAIN"
                     if attempt >= MAX_RESPONSE_ATTEMPTS - 1:
                         raise
                     self._arm_model_delay(model_id, _fallback_retry_delay(attempt))
@@ -204,6 +261,17 @@ class OpenAIResponses:
                     raise RuntimeError(f"OpenAI response status: {body.get('status')} / {body.get('error')}")
                 self._observe_success_rate_window(model_id, payload, response, body)
                 succeeded = True
+                actual_cost = estimated_total_cost(model_id, body)
+                charge_outcome = "CHARGED"
+                if self.capacity:
+                    try:
+                        self.capacity.store_response(
+                            request_hash, capability, model_id, body, actual_cost, model_run_id
+                        )
+                    except Exception:
+                        # Capability-specific durable artifacts still preserve the paid
+                        # result. A cache telemetry failure must not repurchase it now.
+                        pass
                 return body
 
             if last_network_error:
@@ -217,6 +285,13 @@ class OpenAIResponses:
                     # A lost release cannot corrupt business state; the durable TTL
                     # expires the lease and the next worker performs stale recovery.
                     pass
+                if reservation_id:
+                    try:
+                        self.capacity.reconcile_spend(reservation_id, actual_cost, charge_outcome)
+                    except Exception:
+                        # The reservation remains fail-safe and expires as an uncertain
+                        # charge; it never turns into free budget on a lost response.
+                        pass
 
     def _arm_model_delay(self, model_id: str, seconds: float) -> None:
         if not model_id or seconds <= 0:
@@ -436,3 +511,13 @@ def estimated_tool_cost(body: dict[str, Any]) -> float:
 
 def estimated_total_cost(model_id: str, body: dict[str, Any]) -> float:
     return round(estimated_cost(model_id, body.get("usage") or {}) + estimated_tool_cost(body), 6)
+
+
+def reservation_ceiling_usd(model_id: str, payload: dict[str, Any]) -> float:
+    """Conservative pre-request ceiling using one token per UTF-8 byte."""
+    prices = MODEL_PRICES_PER_MILLION[model_id]
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    input_ceiling = len(encoded) * prices["input"] / 1_000_000
+    output_ceiling = int(payload.get("max_output_tokens") or 0) * prices["output"] / 1_000_000
+    tools = int(payload.get("max_tool_calls") or 0) * WEB_SEARCH_COST_PER_CALL_USD
+    return round(input_ceiling + output_ceiling + tools + 0.0001, 4)

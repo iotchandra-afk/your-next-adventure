@@ -10,6 +10,7 @@ from typing import Any
 from .intake import SupabaseREST
 from .job_detail import fetch_job_detail
 from .model_router import OpenAIResponses, estimated_cost
+from .paid_cache import reusable_model_run
 
 CAPABILITY = "RELEVANCE_TRIAGE"
 OUTPUT_SCHEMA_VERSION = "relevance-triage-v1"
@@ -196,22 +197,20 @@ def semantic_input_hash(
 
 
 def _passed_run(db: SupabaseREST, opportunity_id: str, input_hash: str) -> dict[str, Any] | None:
-    rows = db.select("model_runs", {
-        "opportunity_id": f"eq.{opportunity_id}",
-        "capability": f"eq.{CAPABILITY}",
-        "input_hash": f"eq.{input_hash}",
-        "status": "eq.PASSED",
-        "select": "id,trace_id,model_class,model_id,reasoning_effort,finished_at",
-        "order": "finished_at.desc",
-        "limit": "1",
-    })
-    return rows[0] if rows else None
+    return reusable_model_run(
+        db,
+        capability=CAPABILITY,
+        input_hash=input_hash,
+        policy_version=POLICY_VERSION,
+        output_schema_version=OUTPUT_SCHEMA_VERSION,
+        opportunity_id=opportunity_id,
+    )
 
 
-def _reconcile_durable_decision(db: SupabaseREST, role_id: str, run: dict[str, Any]) -> bool:
+def _reconcile_durable_decision(db: SupabaseREST, role_id: str, run: dict[str, Any]) -> str | None:
     trace_id = run.get("trace_id")
     if not trace_id:
-        return False
+        return None
     decisions = db.select("screening_decisions", {
         "trace_id": f"eq.{trace_id}",
         "stage": "eq.MANDATE_RELEVANCE_TRIAGE",
@@ -219,8 +218,11 @@ def _reconcile_durable_decision(db: SupabaseREST, role_id: str, run: dict[str, A
         "limit": "1",
     })
     if not decisions:
-        return False
+        return None
     decision = decisions[0]
+    current = db.select("opportunities", {"id": f"eq.{role_id}", "select": "metadata", "limit": "1"})
+    metadata = dict((current[0].get("metadata") if current else {}) or {})
+    metadata.update({"triage": decision.get("evidence") or {}, "triage_trace_id": trace_id})
     outcome = decision["outcome"]
     stage = {"RELEVANT": "TRIAGE_RELEVANT", "POSSIBLE": "TRIAGE_POSSIBLE", "CLEAR_NO": "TRIAGE_CLEAR_NO"}[outcome]
     visibility = {"RELEVANT": "SURFACED", "POSSIBLE": "GRAY_ZONE", "CLEAR_NO": "HIDDEN"}[outcome]
@@ -231,10 +233,10 @@ def _reconcile_durable_decision(db: SupabaseREST, role_id: str, run: dict[str, A
         "current_reason_text": decision.get("reason_text"),
         "current_confidence": decision.get("confidence"),
         "policy_version": decision.get("policy_version") or POLICY_VERSION,
-        "metadata": {"triage": decision.get("evidence") or {}, "triage_trace_id": trace_id},
+        "metadata": metadata,
         "updated_at": utcnow(),
     })
-    return True
+    return outcome
 
 
 def _persist_result(
@@ -332,6 +334,7 @@ def triage_one(
             json.dumps(context, ensure_ascii=False),
             "relevance_triage",
             SCHEMA,
+            model_run_id=run["id"],
         )
         evidence = {
             "mandate_summary": result["mandate_summary"],

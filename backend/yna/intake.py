@@ -15,19 +15,9 @@ from urllib.parse import urljoin
 
 import requests
 
-POLICY_VERSION = "screening-v1"
+from .screening import POLICY_VERSION, deterministic_screen
+
 USER_AGENT = "YourNextAdventure/0.1 (+executive-opportunity-intelligence)"
-EXECUTIVE_PATTERNS = (
-    r"\bvice president\b", r"\bvp\b", r"\bsvp\b", r"\bevp\b",
-    r"\bsenior director\b", r"\bsr\.? director\b", r"\bdirector\b",
-    r"\bhead of\b", r"\bglobal head\b", r"\bchief\b",
-    r"\bmanaging director\b", r"\bexecutive director\b", r"\bgeneral manager\b",
-)
-CLEAR_NON_TARGET_PATTERNS = (
-    r"\baccount executive\b", r"\bsales development representative\b",
-    r"\bbusiness development representative\b", r"\badministrative assistant\b",
-    r"\bexecutive assistant\b", r"\bintern(ship)?\b",
-)
 
 
 def utcnow() -> str:
@@ -56,15 +46,6 @@ def content_hash(payload: Any) -> str:
 def canonical_key(company: str, title: str, location: str | None) -> str:
     raw = "|".join((normalize_text(company), normalize_text(title), normalize_text(location)))
     return hashlib.sha256(raw.encode()).hexdigest()
-
-
-def deterministic_screen(title: str) -> tuple[str, str, str, float]:
-    normalized = normalize_text(title)
-    if any(re.search(pattern, normalized) for pattern in CLEAR_NON_TARGET_PATTERNS):
-        return "TRIAGE_CLEAR_NO", "HIDDEN", "CLEAR_NON_TARGET_TITLE", 0.99
-    if not any(re.search(pattern, normalized) for pattern in EXECUTIVE_PATTERNS):
-        return "TRIAGE_CLEAR_NO", "HIDDEN", "BELOW_EXECUTIVE_SCOPE", 0.97
-    return "ELIGIBLE", "HIDDEN", "EXECUTIVE_SCOPE_PLAUSIBLE", 0.90
 
 
 @dataclass
@@ -287,7 +268,7 @@ def upsert_canonical_role(db: SupabaseREST, source: dict[str, Any], source_recor
         "screening_stage": stage,
         "visibility": visibility,
         "current_reason_code": reason_code,
-        "current_reason_text": "Plausible executive scope; retained for mandate triage." if stage == "ELIGIBLE" else "Deterministic title screen found no plausible Director+ executive mandate.",
+        "current_reason_text": "Residual executive-mandate ambiguity; retained below the glass for paid triage only when authorized." if stage == "ELIGIBLE" else "Conservative deterministic pre-triage resolved an obvious non-target; retained in the auditable hidden universe.",
         "current_confidence": confidence,
         "policy_version": POLICY_VERSION,
     }

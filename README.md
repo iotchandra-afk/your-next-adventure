@@ -116,11 +116,11 @@ Opportunity is the default work context. Company is the aggregation context. Int
 
 - GitHub: public source of truth and CI/CD control plane
 - ChatGPT Work / durable agent: sustained implementation execution plane
-- GitHub Pages: authenticated single-user cockpit
+- Replit: authorized authenticated single-user cockpit runtime
 - Supabase/PostgreSQL: canonical runtime state, Auth, RLS, provenance, activity
 - React + TypeScript: cockpit
 - Python workers: intake and capability execution
-- OpenAI: Sol for standard reasoning, Astra for high-consequence reasoning
+- OpenAI: disabled in `ZERO_PAID_RUNTIME`; future bounded Sol/Astra use remains database- and owner-authorized
 - Public official ATS/company endpoints: discovery before paid job feeds
 
 ## Architectural rule

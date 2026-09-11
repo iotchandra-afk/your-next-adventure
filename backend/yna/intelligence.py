@@ -274,11 +274,13 @@ def _run_capability(
     try:
         if use_web:
             result, raw, actual_route, sources = ai.structured_with_web(
-                capability, instructions, json.dumps(context, ensure_ascii=False), schema_name, schema
+                capability, instructions, json.dumps(context, ensure_ascii=False), schema_name, schema,
+                model_run_id=run["id"],
             )
         else:
             result, raw, actual_route = ai.structured(
-                capability, instructions, json.dumps(context, ensure_ascii=False), schema_name, schema
+                capability, instructions, json.dumps(context, ensure_ascii=False), schema_name, schema,
+                model_run_id=run["id"],
             )
             sources = []
 
@@ -429,27 +431,26 @@ def core_x(
 
 
 def _targets(db: SupabaseREST, limit: int) -> list[dict[str, Any]]:
-    # Prefer already-prioritized surfaced opportunities; then fill with relevant surfaced roles.
-    prioritized = db.select("opportunities", {
+    candidates = db.select("opportunities", {
         "lifecycle_state": "eq.ACTIVE",
         "visibility": "eq.SURFACED",
         "screening_stage": "eq.PRIORITIZED",
-        "select": "id,title,location,description_text,posted_at,company_id,priority_class,metadata,updated_at",
+        "select": "id,title,location,description_text,posted_at,company_id,screening_stage,visibility,priority_class,metadata,updated_at",
         "order": "updated_at.desc",
-        "limit": str(limit),
+        "limit": str(limit * 4),
     })
-    if len(prioritized) >= limit:
-        return prioritized[:limit]
-    relevant = db.select("opportunities", {
-        "lifecycle_state": "eq.ACTIVE",
-        "visibility": "eq.SURFACED",
-        "screening_stage": "eq.TRIAGE_RELEVANT",
-        "select": "id,title,location,description_text,posted_at,company_id,priority_class,metadata,updated_at",
-        "order": "updated_at.desc",
-        "limit": str(limit * 2),
-    })
-    seen = {r["id"] for r in prioritized}
-    return (prioritized + [r for r in relevant if r["id"] not in seen])[:limit]
+    return [role for role in candidates if deep_intelligence_allowed(role)][:limit]
+
+
+def deep_intelligence_allowed(role: dict[str, Any]) -> bool:
+    metadata = role.get("metadata") or {}
+    active_pursuit = metadata.get("pursuit_status") == "ACTIVE"
+    qualified = (
+        role.get("screening_stage") == "PRIORITIZED"
+        and role.get("visibility") == "SURFACED"
+        and role.get("priority_class") in {"TIER_1", "TIER_2"}
+    )
+    return bool(active_pursuit or qualified)
 
 
 def build_bundle(
@@ -459,6 +460,8 @@ def build_bundle(
     candidate: dict[str, Any],
     candidate_version: str,
 ) -> dict[str, Any]:
+    if not deep_intelligence_allowed(role):
+        raise RuntimeError("Deep intelligence requires a surfaced Tier 1/Tier 2 opportunity or explicit active pursuit.")
     company = _company(db, role["company_id"])
     description = _ensure_description(db, role)
     sources = _source_evidence(db, role["id"])

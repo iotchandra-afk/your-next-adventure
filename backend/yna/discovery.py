@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from .intake import SupabaseREST, canonical_key, content_hash, normalize_text, utcnow
 from .model_router import OpenAIResponses, estimated_total_cost, web_search_call_count
+from .paid_cache import reusable_model_run
 from .screening import POLICY_VERSION, deterministic_screen
 
 SOURCE_KEY = "market:web-search"
@@ -137,12 +138,27 @@ def prepare_records(roles: list[dict[str, Any]], seen_at: str) -> list[dict[str,
     return records
 
 
-def upsert_model_run(db: SupabaseREST, body: dict[str, Any], route: Any, pass_name: str) -> None:
+def discovery_input_hash(pass_name: str, policy_version: str, day_bucket: str) -> str:
+    return content_hash({"pass": pass_name, "policy": DISCOVERY_POLICY, "pursuit_policy": policy_version, "freshness_day": day_bucket})
+
+
+def discovery_pass_reusable(db: SupabaseREST, input_hash: str) -> bool:
+    return reusable_model_run(
+        db,
+        capability="MARKET_DISCOVERY",
+        input_hash=input_hash,
+        policy_version=DISCOVERY_POLICY,
+        output_schema_version="market-roles-v1",
+        opportunity_id=None,
+    ) is not None
+
+
+def upsert_model_run(db: SupabaseREST, body: dict[str, Any], route: Any, pass_name: str, input_hash: str) -> None:
     usage = body.get("usage") or {}
     db.insert("model_runs", {
         "capability": "MARKET_DISCOVERY", "model_class": route.model_class, "model_id": route.model_id,
-        "reasoning_effort": route.reasoning_effort, "status": "COMPLETED",
-        "input_hash": content_hash({"pass": pass_name, "policy": DISCOVERY_POLICY}),
+        "reasoning_effort": route.reasoning_effort, "status": "PASSED",
+        "input_hash": input_hash,
         "output_schema_version": "market-roles-v1", "policy_version": DISCOVERY_POLICY,
         "trace_id": body.get("id"), "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
         "estimated_cost_usd": estimated_total_cost(route.model_id, body), "finished_at": utcnow(),
@@ -256,17 +272,23 @@ def run() -> int:
     if not secret:
         raise RuntimeError("SUPABASE_SECRET_KEY is required")
     db = SupabaseREST(os.environ.get("SUPABASE_URL", "https://rpgaxevgnzyasysyvnqz.supabase.co"), secret)
-    client = OpenAIResponses()
     policy_rows = db.select("pursuit_policy", {"id": "eq.1", "select": "version,policy", "limit": "1"})
     policy = policy_rows[0] if policy_rows else {"version": "unavailable", "policy": {}}
+    day_bucket = utcnow()[:10]
+    probe_hash = discovery_input_hash("independent_recall_probe", policy["version"], day_bucket)
+    discovery_hash = discovery_input_hash("market_discovery", policy["version"], day_bucket)
+    if discovery_pass_reusable(db, probe_hash) and discovery_pass_reusable(db, discovery_hash):
+        print(json.dumps({"status": "SKIPPED_UNCHANGED", "freshness_day": day_bucket}, sort_keys=True))
+        return 0
+    client = OpenAIResponses()
     source = ensure_source(db)
     started = utcnow()
     ingestion_run = db.insert("ingestion_runs", {"source_id": source["id"], "started_at": started, "status": "RUNNING", "details": {"engine": DISCOVERY_POLICY}})[0]
     try:
         probes, probe_body, probe_route = run_grounded_scan(client, policy, probe=True)
         signals, discovery_body, discovery_route = run_grounded_scan(client, policy, probe=False)
-        upsert_model_run(db, probe_body, probe_route, "independent_recall_probe")
-        upsert_model_run(db, discovery_body, discovery_route, "market_discovery")
+        upsert_model_run(db, probe_body, probe_route, "independent_recall_probe", probe_hash)
+        upsert_model_run(db, discovery_body, discovery_route, "market_discovery", discovery_hash)
         records = prepare_records(signals, started)
         counts = ingest_records(db, source["id"], started, records)
         probe_counts, reconciled = reconcile_probes(db, probes, signals, utcnow())

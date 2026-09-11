@@ -2,9 +2,9 @@ from yna.audit import CAPABILITY, SCHEMA
 from yna.model_router import ROUTES
 
 
-def test_false_negative_audit_uses_astra_high():
+def test_false_negative_audit_does_not_bypass_astra_qualification_gate():
     route = ROUTES[CAPABILITY]
-    assert route.model_id == "gpt-6-astra"
+    assert route.model_id == "gpt-5.6-sol"
     assert route.reasoning_effort == "high"
 
 

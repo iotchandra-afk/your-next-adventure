@@ -166,6 +166,23 @@ def test_non_transient_400_fails_without_retry(monkeypatch: pytest.MonkeyPatch) 
     assert sleeps == []
 
 
+def test_exact_cached_response_prevents_provider_and_budget_calls() -> None:
+    cached_body = {"status": "completed", "output": []}
+
+    class CacheCapacity:
+        def cached_response(self, _request_hash: str):
+            return cached_body
+
+        def acquire(self, _model_id: str) -> None:
+            raise AssertionError("cache hit must precede capacity and provider work")
+
+    client = OpenAIResponses(api_key="test", capacity=CacheCapacity())
+    fake = _FakeSession([])
+    client.http = fake  # type: ignore[assignment]
+    assert client._post({"model": "gpt-5.6-sol", "input": "unchanged"}) is cached_body
+    assert fake.calls == 0
+
+
 def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     class Capacity:
         def __init__(self) -> None:
@@ -173,6 +190,19 @@ def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.Monkey
 
         def acquire(self, _model_id: str) -> None:
             return None
+
+        def cached_response(self, _request_hash: str):
+            return None
+
+        def reserve_spend(self, *_args) -> str:
+            self.calls.append(("reserve",))
+            return "reservation-id"
+
+        def reconcile_spend(self, *_args) -> None:
+            self.calls.append(("reconcile",))
+
+        def store_response(self, *_args) -> None:
+            self.calls.append(("store",))
 
         def throttle(self, *args) -> None:
             self.calls.append(args)
@@ -194,7 +224,11 @@ def test_hard_quota_429_is_classified_and_not_retried(monkeypatch: pytest.Monkey
         client._post({"model": "gpt-5.6-sol"})
 
     assert "sensitive provider prose" not in str(exc.value)
-    assert capacity.calls == [("gpt-5.6-sol", 30.0, "insufficient_quota", "credit_balance_exhausted")]
+    assert capacity.calls == [
+        ("reserve",),
+        ("gpt-5.6-sol", 30.0, "insufficient_quota", "credit_balance_exhausted"),
+        ("reconcile",),
+    ]
     assert fake.calls == 1
     assert sleeps == []
 

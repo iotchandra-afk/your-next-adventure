@@ -1,21 +1,16 @@
-name: False-negative audit
+name: Reconcile paid result cache
 on:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: sol-runtime
-  cancel-in-progress: false
 jobs:
-  audit:
+  reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       SUPABASE_URL: https://rpgaxevgnzyasysyvnqz.supabase.co
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       PYTHONPATH: backend
-      AUDIT_LIMIT: '4'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,5 +21,5 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - name: Backend regression tests
         run: pytest -q backend/tests
-      - name: Independently audit a bounded ambiguous sample with Sol
-        run: python -m yna.audit
+      - name: Restore exact unchanged successful decisions
+        run: python -m yna.reconcile_paid_results

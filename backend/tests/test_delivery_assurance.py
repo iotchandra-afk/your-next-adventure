@@ -58,6 +58,25 @@ def test_capacity_denial_never_calls_provider_or_claims_success():
     assert [name for name, _ in db.session.calls] == ["model_spend_allowed"]
 
 
+def test_capacity_reserves_and_reconciles_canonical_budget():
+    db = DB([{"allowed": True, "reservation_id": "reservation-1"}, True])
+    capacity = RuntimeCapacity(db, wait_seconds=0)
+    reservation = capacity.reserve_spend("gpt-5.6-sol", "RELEVANCE_TRIAGE", 0.25, "request-1")
+    capacity.reconcile_spend(reservation, 0.14, "CHARGED")
+    assert reservation == "reservation-1"
+    assert [name for name, _ in db.session.calls] == ["reserve_model_spend", "reconcile_model_spend"]
+    assert db.session.calls[0][1]["p_reserved_usd"] == 0.25
+    assert db.session.calls[1][1]["p_actual_usd"] == 0.14
+
+
+def test_capacity_budget_denial_retains_work_before_provider():
+    db = DB([{"allowed": False, "reason": "BUDGET_EXHAUSTED"}])
+    capacity = RuntimeCapacity(db, wait_seconds=0)
+    with pytest.raises(CapacityUnavailable, match="BUDGET_EXHAUSTED"):
+        capacity.reserve_spend("gpt-6-astra", "DEEP_QUALIFICATION", 1.0, "request-2")
+    assert [name for name, _ in db.session.calls] == ["reserve_model_spend"]
+
+
 def test_batch_triage_requires_one_and_only_one_decision_per_claim():
     decisions = validate_batch_decisions({"decisions": [{"opportunity_id": "a"}, {"opportunity_id": "b"}]}, {"a", "b"})
     assert [item["opportunity_id"] for item in decisions] == ["a", "b"]
@@ -73,7 +92,7 @@ def test_model_workflows_use_per_model_scheduler_lanes_without_push_fanout():
         "triage.yml": "sol-runtime",
         "relevance-eval.yml": "sol-runtime",
         "qualification.yml": "astra-runtime",
-        "audit.yml": "astra-runtime",
+        "audit.yml": "sol-runtime",
         "intelligence.yml": "astra-runtime",
         "model-smoke.yml": "model-runtime-smoke",
     }
