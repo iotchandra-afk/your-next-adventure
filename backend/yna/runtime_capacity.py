@@ -48,7 +48,7 @@ class RuntimeCapacity:
     def acquire(self, model_id: str) -> None:
         if not self.spend_allowed(model_id):
             raise CapacityUnavailable(
-                f"Paid model runtime disabled or budget unavailable for {model_id}; work retained without provider spend."
+                f"Paid model runtime disabled or budget unavailable for {model_id}; work retained for retry without provider spend."
             )
 
         deadline = time.monotonic() + self.wait_seconds
