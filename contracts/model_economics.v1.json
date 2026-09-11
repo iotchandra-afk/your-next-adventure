@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "project": "YourNextAdventure",
+  "mode": "ZERO_PAID_RUNTIME",
+  "paid_runtime_enabled": false,
+  "provider_credit_is_spend_authority": false,
+  "scheduled_paid_model_workflows_enabled": false,
+  "budget_policy": {
+    "validation_cycle_budget_usd": 2.0,
+    "validation_daily_budget_usd": 2.0,
+    "automatic_budget_increase_allowed": false,
+    "enabling_paid_runtime_requires_explicit_owner_approval": true,
+    "raising_budget_requires_explicit_owner_approval": true,
+    "hard_stop_before_provider_request_when_budget_unavailable": true
+  },
+  "routing_economics": {
+    "deterministic_first": true,
+    "target_max_sol_triage_fraction": 0.10,
+    "target_max_astra_fraction": 0.02,
+    "astra_requires_positive_or_ambiguous_prior_gate": true,
+    "deep_intelligence_requires_tier_1_tier_2_or_active_pursuit": true,
+    "full_backlog_may_be_used_as_development_eval": false
+  },
+  "reuse_policy": {
+    "reuse_successful_paid_result_when_material_inputs_unchanged": true,
+    "recompute_on_workflow_rerun_only": false,
+    "minimum_cache_identity": [
+      "CAPABILITY_AND_VERSION",
+      "ENTITY_IDENTITY",
+      "NORMALIZED_INPUT_HASH",
+      "CANDIDATE_TRUTH_VERSION_WHEN_RELEVANT",
+      "PURSUIT_POLICY_VERSION",
+      "MATERIAL_SOURCE_VERSION_OR_FRESHNESS"
+    ]
+  },
+  "bounded_economics_acceptance": {
+    "representative_universe_min_roles": 1000,
+    "max_paid_screening_cycle_usd": 2.0,
+    "known_good_recall_must_be_proven": true,
+    "obvious_non_target_roles_must_not_reach_paid_triage": true,
+    "duplicate_paid_reasoning_must_be_prevented": true,
+    "runtime_budget_hard_stop_must_be_proven": true,
+    "runtime_cost_reconciliation_required": true
+  },
+  "failure_rule": "IF_COST_TARGET_REQUIRES_MATERIAL_RECALL_LOSS_THEN_SIMPLIFY_ARCHITECTURE_DO_NOT_INCREASE_RECURRING_BUDGET"
+}
