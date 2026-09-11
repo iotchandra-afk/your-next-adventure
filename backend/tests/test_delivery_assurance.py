@@ -39,21 +39,23 @@ class DB:
 
 
 def test_capacity_lease_acquire_throttle_release_positive_path():
-    db = DB([True, True, True])
+    db = DB([True, True, True, True])
     capacity = RuntimeCapacity(db, wait_seconds=0)
     capacity.acquire("gpt-5.6-sol")
     capacity.throttle("gpt-5.6-sol", 12, "rate_limit_error", "rate_limit_exceeded")
     capacity.release("gpt-5.6-sol", True)
-    assert [name for name, _ in db.session.calls] == ["acquire_model_lease", "throttle_model_capacity_v2", "release_model_lease"]
-    assert db.session.calls[1][1]["p_error_type"] == "rate_limit_error"
-    assert db.session.calls[1][1]["p_error_code"] == "rate_limit_exceeded"
+    assert [name for name, _ in db.session.calls] == ["model_spend_allowed", "acquire_model_lease", "throttle_model_capacity_v2", "release_model_lease"]
+    assert db.session.calls[2][1]["p_error_type"] == "rate_limit_error"
+    assert db.session.calls[2][1]["p_error_code"] == "rate_limit_exceeded"
     assert db.session.calls[-1][1]["p_succeeded"] is True
 
 
 def test_capacity_denial_never_calls_provider_or_claims_success():
-    capacity = RuntimeCapacity(DB([False]), wait_seconds=0)
+    db = DB([False])
+    capacity = RuntimeCapacity(db, wait_seconds=0)
     with pytest.raises(CapacityUnavailable, match="work retained for retry"):
         capacity.acquire("gpt-6-astra")
+    assert [name for name, _ in db.session.calls] == ["model_spend_allowed"]
 
 
 def test_batch_triage_requires_one_and_only_one_decision_per_claim():
