@@ -55,7 +55,9 @@ def test_github_control_plane_writes_are_not_outbound_candidate_communication() 
     assert control["checkpoint_evidence_write_requires_approval"] is False
 
     assert "These are **internal control-plane mutations**, not outbound candidate communication." in agents
-    assert "do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or ordinary reversible GitHub Pages deployment" in handoff
+    assert "do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or routine reversible deployment to the already-authorized runtime" in handoff
+    assert "GitHub Pages is forbidden" in handoff
+    assert "authorized runtime is REPLIT" in handoff
 
 
 def test_reserved_external_communication_boundary_remains_intact() -> None:
