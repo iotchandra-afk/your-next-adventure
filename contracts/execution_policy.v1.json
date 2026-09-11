@@ -3,9 +3,38 @@
   "project": "YourNextAdventure",
   "mode": "AUTONOMOUS_EXECUTION",
   "implementation_authority_source": "SPEC_MANIFEST.json",
+  "scope_authority_contract": "contracts/scope_authority.v1.json",
   "default_action": "CONTINUE",
   "communication_default": "SILENT",
   "decision_rule": "if task_incomplete and no_blocker and no_approval_boundary and no_human_action and execution_surface_active then CONTINUE",
+  "scope_authority": {
+    "precedence": [
+      "PLATFORM_SYSTEM_SAFETY_AND_PERMISSION_CONSTRAINTS",
+      "CURRENT_MAIN_NORMATIVE_CONTRACTS",
+      "CURRENT_OPEN_P0_P1_ISSUES_AND_GO_LIVE_CONTROL_BOARD",
+      "CURRENT_RUNTIME_EVIDENCE_REOPENING_OR_FALSIFYING_PRIOR_PASS",
+      "ACTIVE_IMPLEMENTATION_PRS_AND_BRANCHES",
+      "CLOSED_MERGED_PRS_CLOSED_ISSUES_AND_HISTORICAL_SUMMARIES"
+    ],
+    "historical_artifacts_are_scope_authority": false,
+    "closed_merged_pr_may_override_current_main": false,
+    "current_open_issue_may_supersede_prior_completion_statement": true,
+    "stale_historical_conflict_requires_user_approval": false,
+    "on_stale_historical_conflict": "USE_CURRENT_HIGHER_PRECEDENCE_AUTHORITY_AND_CONTINUE_UNLESS_TRUE_RESERVED_BOUNDARY_OR_PLATFORM_POLICY_BLOCKS",
+    "issue_7_explicitly_authorized_actions": [
+      "PROVIDER_DIAGNOSTICS_AND_TELEMETRY",
+      "CIRCUIT_BREAKER_AND_BACKPRESSURE_LOGIC",
+      "ADDITIVE_NON_DESTRUCTIVE_SUPABASE_MIGRATION",
+      "STALE_WORK_RECOVERY",
+      "DURABLE_WORKER_STATE_REPAIR",
+      "COMMIT_AND_PUSH",
+      "CREATE_OR_UPDATE_BRANCH_OR_PR",
+      "MERGE_AND_DEPLOY",
+      "CONTROL_PLANE_EVIDENCE_WRITE",
+      "RUNTIME_RECONCILIATION",
+      "RETRY_ROLL_FORWARD_OR_SAFE_ROLLBACK"
+    ]
+  },
   "execution_surface": {
     "ordinary_chat_role": "STEERING_AND_EXCEPTIONS_ONLY",
     "persistent_execution_required_for_cross_response_continuation": true,
@@ -52,6 +81,7 @@
       "PERSIST_CHECKPOINT_OR_VERIFICATION_EVIDENCE",
       "UPDATE_GO_LIVE_CONTROL_BOARD",
       "CREATE_REPOSITORY_COMMIT_BRANCH_OR_TAG",
+      "COMMIT_AND_PUSH_AUTHORIZED_IMPLEMENTATION",
       "WRITE_AUTHORIZED_PROJECT_RUNTIME_EVIDENCE_TO_SUPABASE"
     ],
     "constraints_on_autonomous_control_plane_writes": [
@@ -153,6 +183,7 @@
     "POST_GITHUB_CONTROL_PLANE_COMMENT",
     "PERSIST_CHECKPOINT_OR_VERIFICATION_EVIDENCE",
     "UPDATE_GO_LIVE_CONTROL_BOARD",
+    "COMMIT_AND_PUSH_AUTHORIZED_IMPLEMENTATION",
     "UPDATE_OR_REBASE_IMPLEMENTATION_BRANCH",
     "RESOLVE_ROUTINE_NON_CONSEQUENTIAL_MERGE_CONFLICTS",
     "MERGE_IMPLEMENTATION_PR_TO_MAIN",
@@ -160,6 +191,8 @@
     "GITHUB_PAGES_DEPLOYMENT_FROM_MAIN",
     "VERIFY_ROUTINE_DEPLOYMENT",
     "ADDITIVE_NON_DESTRUCTIVE_SCHEMA_MIGRATION",
+    "PROVIDER_DIAGNOSTICS_AND_TELEMETRY",
+    "CIRCUIT_BREAKER_AND_BACKPRESSURE_LOGIC",
     "BUILD_CHANGE_IMPACT_MAP",
     "VERIFY_AFFECTED_PRODUCT_INVARIANTS",
     "RUN_NEGATIVE_ASSERTIONS",
@@ -191,6 +224,7 @@
     "REITERATION_STATUS",
     "INVARIANT_CHECK_STATUS",
     "RUNTIME_RECONCILIATION_STATUS",
+    "STALE_HISTORICAL_SCOPE_CONFLICT",
     "REQUEST_TO_PROCEED",
     "REQUEST_TO_RECONFIRM_EXISTING_AUTHORITY"
   ],
@@ -225,6 +259,7 @@
     "consequential_unknown": "FAIL_CLOSED",
     "invariant_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_CONTINUE",
     "post_deploy_reconciliation_failure": "REPAIR_OR_SAFE_ROLLBACK_AND_REVERIFY",
+    "stale_historical_scope_conflict": "IGNORE_LOWER_PRECEDENCE_ARTIFACT_AND_CONTINUE",
     "escalate_only_if_stop_condition": true,
     "bundle_unresolved_questions": true,
     "base_branch_drift": "REPAIR_AND_CONTINUE"
@@ -244,6 +279,8 @@
     "product_contract": "SPEC.md",
     "agent_contract": "AGENTS.md",
     "manifest": "SPEC_MANIFEST.json",
+    "scope_authority_contract": "contracts/scope_authority.v1.json",
+    "scope_authority_document": "docs/SCOPE_AUTHORITY.md",
     "product_invariants": "contracts/product_invariants.v1.json",
     "iteration_contract": "docs/ITERATION_CONTRACT.md",
     "delivery_assurance_contract": "docs/DELIVERY_ASSURANCE_CONTRACT.md",
