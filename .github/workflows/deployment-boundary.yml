@@ -1,0 +1,42 @@
+name: Deployment boundary guard
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  enforce-deployment-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject GitHub Pages deployment paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if grep -RInE \
+            --include='*.yml' --include='*.yaml' \
+            --exclude='deployment-boundary.yml' \
+            'actions/(configure-pages|upload-pages-artifact|deploy-pages)|pages:[[:space:]]*write|environment:[[:space:]]*github-pages' \
+            .github/workflows; then
+            echo 'ERROR: GitHub Pages deployment is forbidden for YourNextAdventure.'
+            exit 1
+          fi
+
+          if find . -type f -name CNAME -print -quit | grep -q .; then
+            echo 'ERROR: CNAME files are forbidden in YourNextAdventure.'
+            exit 1
+          fi
+
+          if grep -RInE \
+            --include='*.yml' --include='*.yaml' --include='*.json' --include='*.toml' --include='*.ts' --include='*.js' --include='*.mjs' --include='*.cjs' \
+            --exclude='deployment-boundary.yml' \
+            'chandrakanojia\.com|iotchandra-afk\.github\.io' \
+            .github config package.json vite.config.ts 2>/dev/null; then
+            echo 'ERROR: Personal-site domains are forbidden as YourNextAdventure deployment targets.'
+            exit 1
+          fi
+
+          echo 'Deployment boundary verified.'
