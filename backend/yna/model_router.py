@@ -23,11 +23,16 @@ WEB_SEARCH_MAX_CALLS = 5
 MAX_RESPONSE_ATTEMPTS = 4
 MAX_RETRY_DELAY_SECONDS = 300.0
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+NON_RETRYABLE_CAPACITY_CODES = {"insufficient_quota", "billing_hard_limit_reached"}
 ASTRA_WEB_FALLBACK_COOLDOWN_SECONDS = 180.0
 _INLINE_CITATION = re.compile(r"\s*\(\[[^\]]+\]\(https?://[^)]+\)\)")
 _BARE_MARKDOWN_CITATION = re.compile(r"\s*\[[^\]]+\]\(https?://[^)]+\)")
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)", re.IGNORECASE)
 _CAPACITY_AUTO = object()
+
+
+class ProviderBackpressure(RuntimeError):
+    """A classified provider-capacity failure safe to persist as telemetry."""
 
 
 @dataclass(frozen=True)
@@ -174,11 +179,18 @@ class OpenAIResponses:
                     self._arm_model_delay(model_id, _fallback_retry_delay(attempt))
                     continue
 
-                if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
+                if response.status_code == 429:
                     delay = _response_retry_delay(response, attempt)
-                    if response.status_code == 429 and self.capacity:
-                        self.capacity.throttle(model_id, delay)
+                    error = _provider_error(response, model_id, delay)
+                    if self.capacity:
+                        self.capacity.throttle(model_id, delay, error["type"], error["code"])
+                    if error["code"] in NON_RETRYABLE_CAPACITY_CODES or attempt >= MAX_RESPONSE_ATTEMPTS - 1:
+                        raise ProviderBackpressure(_provider_error_message(error))
                     self._arm_model_delay(model_id, delay)
+                    continue
+
+                if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_RESPONSE_ATTEMPTS - 1:
+                    self._arm_model_delay(model_id, _response_retry_delay(response, attempt))
                     continue
 
                 response.raise_for_status()
@@ -346,6 +358,30 @@ def _response_retry_delay(response: requests.Response, attempt: int) -> float:
     if hinted:
         return min(max(hinted) + random.uniform(0.0, 0.25), MAX_RETRY_DELAY_SECONDS)
     return _fallback_retry_delay(attempt)
+
+
+def _provider_error(response: requests.Response, model_id: str, retry_delay: float) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except (ValueError, TypeError):
+        body = {}
+    raw = body.get("error") if isinstance(body, dict) else {}
+    raw = raw if isinstance(raw, dict) else {}
+    return {
+        "status": response.status_code,
+        "model": model_id,
+        "type": str(raw.get("type") or "unknown")[:120],
+        "code": str(raw.get("code") or "unknown")[:120],
+        "retry_after_seconds": round(retry_delay, 3),
+    }
+
+
+def _provider_error_message(error: dict[str, Any]) -> str:
+    return (
+        "Provider backpressure: "
+        f"status={error['status']} model={error['model']} type={error['type']} "
+        f"code={error['code']} retry_after_seconds={error['retry_after_seconds']}"
+    )
 
 
 def normalize_source_url(value: Any) -> str | None:

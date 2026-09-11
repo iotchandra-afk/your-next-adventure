@@ -78,7 +78,8 @@ POTENCY-PRESERVING REITERATION IS MANDATORY:
 IMPORTANT CONTROL-PLANE WRITE RULE:
 - OUTBOUND_COMMUNICATION_SEND means human-facing communication to a person or external audience outside this project's control plane;
 - repository-native PR/issue/comment/control-board writes, commits/pushes within authorized scope, and authorized Supabase runtime evidence are autonomous project-control actions when inside authorized scope, contain no prohibited private candidate data/secrets, and cross no other reserved boundary;
-- do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, commit/push, merge, or ordinary reversible GitHub Pages deployment.
+- do not ask the user to approve creating/updating a PR, issue, control-plane comment, checkpoint evidence, merge, or ordinary reversible GitHub Pages deployment;
+- do not ask the user to approve routine commits or pushes within authorized scope.
 
 IMPORTANT MERGE/DEPLOY/MIGRATION RULE:
 - production is not by itself an approval boundary;
