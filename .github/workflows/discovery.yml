@@ -1,8 +1,6 @@
 name: Broad market discovery
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '43 */6 * * *'
 permissions:
   contents: read
 concurrency:
